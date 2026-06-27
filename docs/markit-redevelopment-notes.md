@@ -171,5 +171,30 @@ Before further brainstorming or PRD finalization, dispatch subagents to study th
 
 1. ✅ ~~Continue brainstorming after reference-project research.~~（构想蓝图2 已整合所有决策）
 2. ✅ ~~Produce a complete PRD for Codex target mode.~~（`docs/prd.md` 已按蓝图2 更新）
-3. ~~Before entering plan mode, create one HTML page that shows all plugin UI elements and states for user critique.~~（待执行）
+3. ✅ ~~Before entering plan mode, create one HTML page that shows all plugin UI elements and states for user critique.~~（已交付为**组件画廊** `preview/`，按用户选择采用画廊形式而非单页集成；见下方「UI 预览草稿」小节）
 4. ~~Only after the PRD and UI critique are stable should implementation planning begin.~~（当前阶段）
+
+## UI 预览草稿与初期视觉方向（2026-06-27 会话裁决）
+
+**交付物**：`preview/` 组件画廊。`preview/pigeonlib.css`（设计令牌 + 基础控件配方）+ `preview/index.html`（画廊宿主，复刻 `ui-extract/components.html` 形式）+ `preview/parts/01–16-*.html`（16 个 PD 表面，各自渲染在中性网页背景上）。验证方式：在 `preview/` 起静态服务后用浏览器/Playwright 截图逐卡核对。
+
+**裁决 1 — 初期视觉方向：MarkIt 形态 + 邮政金皮肤**
+- 初期先做 MarkIt 的「小改款」：沿用 MarkIt 的**形状与布局**（上下圆形 pill 胶囊工具盘、圆形悬浮球、面板/控件比例、控件行/分段/开关/左导航等结构），配色用已裁决的 pigeonlib（暖纸白 + 邮政金 + 宋体标题 + Lucide）。
+- **PD 自己的特色留到后期**再做。
+- 玻璃拟态仍属构想蓝图2 禁区，**不**沿用 MarkIt 的深色玻璃质感。
+- V1 砍掉的 MarkIt 功能确认不进预览：开发/原型双模式、AI/Bug/PRD 输出模板、输出详细度、多 pin 样式、Markdown 导出、隐藏标注。
+
+**裁决 2 — 批注/编辑面板去顶栏**
+- 删掉 MarkIt 的 `markit-pnl-hdr` 顶部栏（拖拽条 + 「开发标注 #1」标题 + AI/Bug/PRD 模板按钮 + 关闭 ✕）——「这里没有任何有用信息」。
+- 面板**无显式关闭按钮**：靠 Esc / 点击面板外 / 保存关闭。
+- 需要显示的信息与操作集成到**底栏**：左 `位号 · 元素类型 · 位置(px)`，右 删除 + 保存。该底栏模式与批注卡片底栏统一（卡片底栏右侧为 删除 + 修改）。
+
+**裁决 3 — 第二轮收紧（2026-06-27 截图批注）**
+总原则：**这是悬浮工具，占用最小视线成本**——全局更紧凑、减少「廉价」的横线分割。
+- **悬浮球/工具盘**：悬浮球收到与 MarkIt 触发球同尺寸 **42px**；工具盘列宽与悬浮球一致（按钮 34px border-box + padding 3 + 边 1 = 42）。
+- **工具盘按钮顺序**：撤销/重做移到 **Logo 与「移动」之间**，做成**横向药丸**（左半撤销 / 右半重做）；**Logo 展开态也用金底浅羽**（与收起球一致）；**设置图标改齿轮**；**去掉 pill 内的短横线分割**。
+- **批注/编辑面板**：去掉顶部「希望 AI 怎么改」prose 输入框（编辑面板靠结构化修改 + 变更说明表达意图，散文意图归批注卡片）。
+- **高级样式区**：① 加**底框**（导航 + 控件收进一个浅底容器，内部调色盘去内边框避免卡片套卡片）；② **删除**底部 Before/After 总览；③ 左侧分类导航在该类有改动时显示**变更角标**（左竖条 + 计数点，仿 MarkIt `has-change`）；④ 变更说明改为**贴在小节标题右侧**、精简为「旧 → 新」（如 `圆角 7px → 12px`）。
+- **设置面板**：加**分类导航**（通用/交互/输出/帮助，**圆形选中样式**、更窄更紧凑）；**限定长度**（按分类收敛，不再一长条）；**去掉逐行横线**，靠留白 + 分组标题分隔。
+- **区域批注**：删除按钮改**垃圾桶图标**（与面板/卡片底栏统一）。
+- 预览复核：用无依赖 CDP 脚本（Node 24 全局 WebSocket 驱动 `chrome-headless-shell`）量测各表面真实高度并截图，回填 `index.html` 的 iframe 高度（设置面板由 962px 收到 ~356px）。

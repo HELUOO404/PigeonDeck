@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../pigeonlib.css">
+<style>
+  html,body{margin:0;height:100%}
+  .wp{display:flex;align-items:center;justify-content:center;padding:0}
+  .stage{position:relative;width:74px;height:74px;display:flex;align-items:center;justify-content:center}
+  .halo{position:absolute;inset:0;border-radius:50%;background:radial-gradient(closest-side,rgba(184,132,44,.14),transparent 72%)}
+  /* 收起态实际尺寸 42px（与 MarkIt 触发球一致） */
+</style>
+</head>
+<body>
+  <div class="wp">
+    <div class="stage">
+      <div class="halo"></div>
+      <div class="pd-ball" title="PigeonDeck">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M4.6 15.2Q10 9.2 17 10.1Q12.8 14.2 7.4 16.1Q5.7 16.6 4.6 15.2ZM9 12.6Q12 5.9 18.8 5Q16.4 9.8 12.4 11.7Q10.5 12.7 9 12.6ZM16.7 10L20.4 8.9 17.2 11.4Z"/></svg>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

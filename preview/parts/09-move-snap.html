@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../pigeonlib.css">
+<style>
+  html,body{margin:0;height:100%}
+  .blk{position:absolute;width:140px;height:46px;display:flex;align-items:center;justify-content:center;
+    background:#fff;border:1px solid #e7e9ee;border-radius:8px;
+    font:500 13px var(--font-ui);color:#3a4250;box-shadow:0 1px 2px rgba(15,20,30,.05)}
+</style>
+</head>
+<body>
+  <div class="wp">
+    <h1 class="wp-h">移动 · 吸附</h1>
+    <p class="wp-sub">真实元素预览 + 对齐参考线</p>
+    <!-- 参考块 A -->
+    <div class="blk" style="left:120px;top:60px">概览模块</div>
+    <!-- 移动中的块 B（真实预览） -->
+    <div class="blk pd-moving" style="left:120px;top:114px">活动模块</div>
+    <!-- 垂直居中参考线 -->
+    <div class="pd-guide v" style="left:190px;top:46px;height:128px"></div>
+    <div class="pd-guide-label" style="left:152px;top:32px">水平居中</div>
+    <!-- 间距参考线 + 标签 -->
+    <div class="pd-guide h" style="left:266px;top:110px;width:36px"></div>
+    <div class="pd-guide-label" style="left:268px;top:118px">8px 间距</div>
+  </div>
+</body>
+</html>

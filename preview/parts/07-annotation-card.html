@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../pigeonlib.css">
+<style>
+  html,body{margin:0;height:100%}
+  .wp{display:flex;align-items:center;justify-content:center;padding:0}
+  .acard{position:relative;width:252px}
+  .acard .note{padding:13px 14px 10px;font-size:13px;line-height:1.55;color:var(--ctx)}
+  .acard .hr{height:1px;background:var(--cbd);margin:0 14px}
+  .acard .mods{padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .acard .mod{display:flex;justify-content:space-between;gap:12px;font-size:12px}
+  .acard .mod .lab{color:var(--ctx2)}
+  .acard .mod .val{color:var(--ctx);font-variant-numeric:tabular-nums}
+  .acard .mod .val i{color:var(--ctx2);font-style:normal;margin:0 4px}
+  .acard .mod .val b{color:var(--c1);font-weight:600}
+  .acard .foot{display:flex;align-items:center;justify-content:space-between;
+    padding:8px 9px 8px 14px;border-top:1px solid var(--cbd);
+    background:var(--cbg);border-radius:0 0 var(--r-card) var(--r-card)}
+  .acard .meta{font-size:11px;color:var(--ctx2);font-variant-numeric:tabular-nums}
+  .acard .acts{display:flex;gap:2px}
+  .acard .pd-pin{left:-11px;top:-11px}
+</style>
+</head>
+<body>
+  <div class="wp">
+    <div class="pd-surface acard">
+      <div class="pd-pin">1</div>
+      <!-- 上半：批注文本 -->
+      <div class="note">把这个按钮改成更醒目的主行动样式，并在卡片里水平居中。</div>
+      <div class="hr"></div>
+      <!-- 下半：调整项 原值 → 新值 -->
+      <div class="mods">
+        <div class="mod"><span class="lab">背景色</span><span class="val">#3f4756<i>→</i><b>#b8842c</b></span></div>
+        <div class="mod"><span class="lab">圆角</span><span class="val">7px<i>→</i><b>9px</b></span></div>
+        <div class="mod"><span class="lab">对齐</span><span class="val">left<i>→</i><b>center</b></span></div>
+      </div>
+      <!-- 底栏：位号·元素类型·位置 | 删除 + 修改 -->
+      <div class="foot">
+        <span class="meta">① · button · 132×38px</span>
+        <span class="acts">
+          <button class="pd-iconbtn danger" title="删除批注"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg></button>
+          <button class="pd-iconbtn" title="修改批注"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></button>
+        </span>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

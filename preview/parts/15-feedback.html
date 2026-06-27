@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="../pigeonlib.css">
+<style>
+  html,body{margin:0;height:100%}
+  .wp{padding:20px 22px}
+  .lbl{font:600 10.5px var(--font-ui);letter-spacing:.5px;text-transform:uppercase;color:var(--ctx2);margin:0 0 9px}
+  .btns{display:flex;gap:20px;margin-bottom:20px}
+  .fb{display:flex;flex-direction:column;align-items:center;gap:7px}
+  .fb .b{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;
+    border:1px solid var(--cbd);background:var(--csf);box-shadow:var(--sh)}
+  .fb .b svg{width:19px;height:19px}
+  .fb .b.ok{color:var(--cs);border-color:rgba(92,138,74,.45);background:rgba(92,138,74,.10)}
+  .fb .b.err{color:var(--cd);border-color:rgba(178,58,46,.45);background:rgba(178,58,46,.10)}
+  .fb .cap{font-size:11px;color:var(--ctx2)}
+</style>
+</head>
+<body>
+  <div class="wp">
+    <p class="lbl">按钮内反馈</p>
+    <div class="btns">
+      <div class="fb">
+        <span class="b ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="cap">复制文本 · 成功</span>
+      </div>
+      <div class="fb">
+        <span class="b err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg></span>
+        <span class="cap">复制文本 · 失败</span>
+      </div>
+      <div class="fb">
+        <span class="b ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></span>
+        <span class="cap">复制图片 · 成功</span>
+      </div>
+    </div>
+
+    <p class="lbl">轻提示</p>
+    <div class="pd-toast">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="color:#9bd07f"><path d="M20 6 9 17l-5-5"/></svg>
+      已复制任务清单（英文）
+    </div>
+  </div>
+</body>
+</html>
