@@ -101,6 +101,14 @@
     </div>
   </section>
 
+  <!-- Two alignable absolutely-positioned blocks for phase 6b drag/snap tests.
+       #snap-a fixed reference; #snap-b starts near-but-not-aligned so a small
+       drag toward #snap-a's left edge triggers a snap guide. -->
+  <div id="snap-zone" style="position:relative;height:260px;margin-top:24px;">
+    <div id="snap-a" style="position:absolute;left:120px;top:20px;width:140px;height:60px;background:#fff;border:1px solid #ccc;border-radius:8px;"></div>
+    <div id="snap-b" style="position:absolute;left:130px;top:140px;width:140px;height:60px;background:#fff;border:1px solid #ccc;border-radius:8px;"></div>
+  </div>
+
   <!-- Extra space to test scroll + toolbar boundary behavior -->
   <div class="spacer"></div>
 </body>
