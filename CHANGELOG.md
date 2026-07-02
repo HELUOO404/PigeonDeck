@@ -11,6 +11,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 3a：批注核心链路（2026-07-02）
+
+- DOM 工具（`src/shared/dom-utils.ts`）：`buildSelector` 稳定唯一选择器（id 锚点 → 唯一 class 组合 → nth-of-type 链，软深度上限 + querySelector 唯一性验证，跳过 css-hash 噪音类）；`classifyElement` 六类元素分类（text/image/video/button/container/other）；`getElementSummary` / `isVisible`；23 个 vitest 单测全绿
+- 标注状态层（`src/state/annotations.ts`）：Annotation 数据模型（changes 预留 3b 填充）+ Store（add/update/remove/clear/getAll/getBySelector + subscribe 订阅）；**编号规则全实现：递增分配、删除不重排、清空后从 1 重置**；28 个单测覆盖编号规则/增删改查/序列化往返
+- 会话持久化（`src/state/session.ts`）：sessionStorage 天然匹配 tab 会话（刷新在、关 tab 清），key = `pigeondeck:` + 完整 URL，序列化顶层按 pageKey 组织（V2 多页扩展点）；store 变化 300ms 防抖写入，解绑冲刷
+- 极简设置（`src/state/settings.ts`）：chrome.storage.local 存取，本阶段 `hoverLabel: true` + `cardDefaultExpanded: false` 两项，默认值合并留好扩展
+- 覆盖层（`src/content/overlay.ts`）：批注模式 hover 高亮框（`--c1-edge` 1.5px + `--c1-soft` 底）+ 元素标签（9px 白字深色半透明底 + `--c1` 描边，显示 tagName 跟随鼠标，settings.hoverLabel 控制）；已保存标注渲染标注框（`--c1` 1.5px 圆角 6px）+ 位号圆（22px 金底白字，左上角）；**跟随机制**：scroll（capture 段含嵌套滚动）/resize rAF 节流 + ResizeObserver + MutationObserver 兜底；目标元素消失隐藏 UI 保留数据、自动尝试重解析；composedPath 过滤自身 Shadow UI
+- 批注面板（`src/content/panel.ts`）：单击页面元素弹出（capture 段拦截 click/mousedown，阻止链接跳转等页面默认行为）；结构 = 批注 textarea（field-sizing 自适应高度）+ 底栏（`#位号 · 元素类型 · x,y px` + 删除/保存）；四向翻转避让视口（右→下→左→上）；点外部关闭放弃未保存内容；已有标注再单击预填内容
+- 批注卡片：点位号圆展开/收起（`.pd-surface` 卡片：批注文本 + 底栏删除/修改），默认展开态读 settings.cardDefaultExpanded；四向翻转防截断，放不下夹紧视口并画 `.pd-connector` 虚线连回位号圆；跟随目标元素滚动
+- 位号圆右键菜单：`.pd-menu` 上弹（修改批注 / 删除批注危险色），点外部关闭；删除不重排编号，新标注继续用下一个号
+- 恢复与轻提示：注入时按 selector 重新定位挂标注 UI，找不到的目标数据保留、UI 跳过，feedback 层 `.pd-toast` 轻提示「N 条标注未能定位」（190ms 进出，2.5s 自动消失）
+- i18n：新增 5 个批注文案 key（panel_note_placeholder / panel_save / menu_edit_annotation / menu_delete_annotation / toast_restore_missing），中英双语同步
+- E2E 测试：`tests/e2e/annotation.spec.ts` 6 用例（hover 高亮+标签、单击面板保存出位号、卡片开合、右键菜单删除+编号不复用、刷新恢复、链接点击拦截不导航），时序断言全部轮询；夹具页新增带 href 链接卡
+- 测试基建：引入 jsdom（DOM 类单测环境，per-file `@vitest-environment` 注解）
+
 ### Coding — 阶段 2：工具盘与悬浮球（2026-07-02）
 
 - 模式控制器（`src/content/controller.ts`）：极简状态机 `mode: annotate/move/settings + expanded`，展开自动进入 annotate，move/settings 互斥，收起重置；瞬时动作回调挂点；subscribe() 订阅机制；24 个 vitest 单测全绿
