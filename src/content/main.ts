@@ -13,6 +13,7 @@ import { Overlay } from './overlay';
 import { PanelManager } from './panel';
 import { Toast } from './toast';
 import { AnnotationStore, Annotation } from '../state/annotations';
+import { History } from '../state/history';
 import { restoreSession, bindSessionPersistence } from '../state/session';
 import { loadSettings, Settings } from '../state/settings';
 
@@ -86,6 +87,9 @@ function inject(settings: Settings): void {
   if (restored) store.load(restored);
   bindSessionPersistence(store);
 
+  // 撤销/重做历史栈（默认 50 步；按钮/快捷键接线在阶段 7）
+  const history = new History();
+
   const toast = new Toast(feedbackLayer);
 
   // Overlay 与 PanelManager 互相引用：先建 Overlay（hooks 后挂），再建 PanelManager
@@ -97,7 +101,7 @@ function inject(settings: Settings): void {
     onPinClick: (a) => hooks.onPinClick?.(a),
     onPinContextMenu: (a, pinEl) => hooks.onPinContextMenu?.(a, pinEl),
   });
-  const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings);
+  const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings, history);
   hooks.onPinClick = panelManager.togglePinCard;
   hooks.onPinContextMenu = panelManager.openPinMenu;
 

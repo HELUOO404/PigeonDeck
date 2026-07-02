@@ -1,14 +1,19 @@
 /* ============================================================
    panel.ts — 批注面板 / 批注卡片 / 位号圆右键菜单（渲染进 panel 层）
    - 批注模式 capture 段拦截 click/mousedown，阻止页面默认行为（如链接跳转）
-   - 单击页面元素 → 弹出批注面板（textarea + 底栏），四向翻转避让视口
-   - 点位号圆 → 展开/收起批注卡片；放不下时 .pd-connector 虚线连回位号圆
+   - 单击页面元素 → 弹出批注面板（textarea + 修改栏 + 高级样式 + 底栏）
+   - 修改栏按元素类型智能切换；控件与高级样式双入口单源（fields.ts）
+   - 控件改动即时预览 → StyleChange 记录；保存写入 store + 撤销历史；
+     未保存关面板（点外部）回滚本次会话预览
+   - 面板长度动画：切分区/展开收起高级样式时 height px→auto 过渡（190ms）
+   - 点位号圆 → 展开/收起批注卡片（含「调整项：原值 → 新值」行）
    - 右键位号圆 → 上下文菜单（修改批注 / 删除批注）
-   视觉配方：base.css（.pd-surface/.panel/.pfoot/.acard/.pd-menu）
+   视觉配方：base.css（.pd-surface/.panel/.pfoot/.acard/.pd-menu/.modbox/.advbox）
    ============================================================ */
 
 import { Controller } from './controller';
-import { AnnotationStore, Annotation } from '../state/annotations';
+import { AnnotationStore, Annotation, StyleChange, mergeChanges } from '../state/annotations';
+import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import { Overlay } from './overlay';
 import { t } from './i18n';
@@ -17,12 +22,27 @@ import {
   classifyElement,
   getElementSummary,
 } from '../shared/dom-utils';
+import type { ElementType } from '../shared/dom-utils';
+import {
+  FieldsSession,
+  ControlContext,
+  FIELD_DEFS,
+  modbarRows,
+  autoModbarRows,
+  modbarTitleKey,
+  renderRows,
+} from './fields';
+import { createAdvancedBox } from './advanced-styles';
+import { closeAllPopovers } from './popover';
 
-/* ---- SVG 图标（Lucide 风格，与 preview parts 07/26 一致） ---- */
+/* ---- SVG 图标（Lucide 风格，与 preview parts 07/11/26/35 一致） ---- */
 const ICONS = {
   trash: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>`,
   pencil: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>`,
   editSquare: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>`,
+  chevR: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>`,
+  chevD: `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>`,
 } as const;
 
 const PANEL_WIDTH = 330; // preview part 11
@@ -74,6 +94,27 @@ function metaText(number: number, elementType: string, x: number, y: number): st
   return `#${number} · ${elementType} · ${x},${y}px`;
 }
 
+/**
+ * 按修改记录把元素样式切到旧值/新值（撤销/重做/删除回退用）。
+ * oldValue 是打开面板时的 computed/inline 值，写成 inline 视觉等价。
+ */
+function applyChangesTo(target: Element | null, changes: StyleChange[], dir: 'old' | 'new'): void {
+  if (!(target instanceof HTMLElement)) return;
+  for (const c of changes) {
+    const value = dir === 'old' ? c.oldValue : c.newValue;
+    if (c.cssProp === 'text') {
+      target.textContent = value;
+    } else {
+      target.style.setProperty(c.cssProp, value);
+    }
+  }
+}
+
+/** 卡片调整项展示值截断（文字内容修改可能很长） */
+function truncateValue(value: string, max = 24): string {
+  return value.length > max ? value.slice(0, max) + '…' : value;
+}
+
 /** 打开的卡片记录 */
 interface OpenCard {
   annotation: Annotation;
@@ -87,12 +128,16 @@ export class PanelManager {
   private overlay: Overlay;
   private root: HTMLElement; // panel 层根容器
   private settings: Settings;
+  private history: History;
   private shadowHost: Element;
 
   // 批注面板（一次一个）
   private panelEl: HTMLElement | null = null;
   private panelTarget: Element | null = null;
   private panelExisting: Annotation | null = null;
+  // 本次面板会话的字段状态（双入口单源）；保存后置空，未保存关面板回滚
+  private session: FieldsSession | null = null;
+  private panelCommitted = false;
 
   // 批注卡片（可多个并存）
   private cards: Map<string, OpenCard> = new Map();
@@ -112,13 +157,15 @@ export class PanelManager {
     store: AnnotationStore,
     overlay: Overlay,
     panelLayer: HTMLElement,
-    settings: Settings
+    settings: Settings,
+    history: History
   ) {
     this.controller = controller;
     this.store = store;
     this.overlay = overlay;
     this.root = panelLayer;
     this.settings = settings;
+    this.history = history;
     this.shadowHost = (panelLayer.getRootNode() as ShadowRoot).host;
 
     this.unsubscribeController = controller.subscribe(() => this.syncActive());
@@ -169,14 +216,18 @@ export class PanelManager {
 
   private onMouseDown = (ev: MouseEvent): void => {
     const path = ev.composedPath();
+    // 浮层（下拉/调色盘）内点击不算"面板外部"（浮层自身管理关闭）
+    const inPopover = path.some(
+      (n) => n instanceof HTMLElement && n.hasAttribute('data-pd-popover')
+    );
 
     // 菜单外点击 → 关菜单
     if (this.menuEl && !path.includes(this.menuEl)) {
       this.closeMenu();
     }
 
-    // 面板外点击 → 关面板（放弃未保存内容）
-    if (this.panelEl && !path.includes(this.panelEl)) {
+    // 面板外点击 → 关面板（放弃未保存内容，回滚本次会话预览）
+    if (this.panelEl && !path.includes(this.panelEl) && !inPopover) {
       this.closePanel();
     }
 
@@ -229,13 +280,22 @@ export class PanelManager {
     panel.style.width = `${PANEL_WIDTH}px`;
 
     const body = document.createElement('div');
-    body.className = 'pbody';
+    body.className = 'pbody pd-scroll';
     const textarea = document.createElement('textarea');
     textarea.className = 'pd-textarea';
     textarea.setAttribute('data-testid', 'pd-panel-note');
     textarea.placeholder = t('panel_note_placeholder');
     textarea.value = existing?.note ?? '';
     body.appendChild(textarea);
+
+    // ---- 修改栏（按元素类型智能切换）+ 高级样式区 ----
+    if (target instanceof HTMLElement) {
+      this.session = new FieldsSession(target);
+      this.panelCommitted = false;
+      const ctx: ControlContext = { popoverRoot: this.root };
+      body.appendChild(this.buildModbox(target, elementType, ctx));
+      body.appendChild(this.buildAdvSlot(elementType, ctx));
+    }
     panel.appendChild(body);
 
     const foot = document.createElement('div');
@@ -259,8 +319,8 @@ export class PanelManager {
       btnDelete.setAttribute('aria-label', t('menu_delete_annotation'));
       btnDelete.innerHTML = ICONS.trash;
       btnDelete.addEventListener('click', () => {
-        this.store.remove(existing.id);
-        this.closePanel();
+        this.closePanel(); // 先回滚本次会话预览
+        this.deleteAnnotation(existing);
       });
       acts.appendChild(btnDelete);
     }
@@ -297,6 +357,112 @@ export class PanelManager {
     this.panelEl.style.top = `${pos.top}px`;
   }
 
+  // ---- 修改栏 + 高级样式区 ----
+
+  /** 修改栏：按元素类型智能切换；陌生元素 = autonote + computed 自动列控件（「自动」角标） */
+  private buildModbox(target: HTMLElement, elementType: ElementType, ctx: ControlContext): HTMLElement {
+    const modbox = document.createElement('div');
+    modbox.className = 'modbox';
+    modbox.setAttribute('data-testid', 'pd-modbox');
+
+    const head = document.createElement('div');
+    head.className = 'modbox-h';
+    head.textContent = t(modbarTitleKey(elementType));
+    modbox.appendChild(head);
+
+    const isAuto = elementType === 'other';
+    if (isAuto) {
+      const note = document.createElement('div');
+      note.className = 'autonote';
+      note.setAttribute('data-testid', 'pd-autonote');
+      note.innerHTML = ICONS.info;
+      note.appendChild(
+        document.createTextNode(t('modbar_autonote').replace('{tag}', target.tagName.toLowerCase()))
+      );
+      modbox.appendChild(note);
+    }
+
+    const rows = isAuto ? autoModbarRows(target) : modbarRows(elementType);
+    renderRows(modbox, this.session!, rows, ctx, { auto: isAuto });
+    return modbox;
+  }
+
+  /** 高级样式折叠槽：收起 = .adv 行；展开 = .adv-head + advbox；切换走高度动画 */
+  private buildAdvSlot(elementType: ElementType, ctx: ControlContext): HTMLElement {
+    const slot = document.createElement('div');
+
+    const renderCollapsed = (): void => {
+      slot.innerHTML = '';
+      const adv = document.createElement('div');
+      adv.className = 'adv';
+      adv.setAttribute('data-testid', 'pd-adv-toggle');
+      const title = document.createElement('span');
+      title.textContent = t('adv_title');
+      adv.appendChild(title);
+      const r = document.createElement('span');
+      r.className = 'r';
+      const meta = document.createElement('span');
+      meta.className = 'meta';
+      meta.textContent =
+        elementType === 'other'
+          ? t('adv_auto_meta')
+          : ['adv_cat_typography', 'adv_cat_size', 'adv_cat_appearance', 'adv_cat_debug']
+              .map((k) => t(k))
+              .join(' · ');
+      r.appendChild(meta);
+      r.insertAdjacentHTML('beforeend', ICONS.chevR);
+      adv.appendChild(r);
+      adv.addEventListener('click', () => {
+        this.animatePanelHeight(() => renderExpanded());
+      });
+      slot.appendChild(adv);
+    };
+
+    const renderExpanded = (): void => {
+      slot.innerHTML = '';
+      const head = document.createElement('div');
+      head.className = 'adv-head';
+      head.setAttribute('data-testid', 'pd-adv-toggle');
+      const title = document.createElement('span');
+      title.textContent = t('adv_title');
+      head.appendChild(title);
+      head.insertAdjacentHTML('beforeend', ICONS.chevD);
+      head.addEventListener('click', () => {
+        this.animatePanelHeight(() => renderCollapsed());
+      });
+      slot.appendChild(head);
+      slot.appendChild(
+        createAdvancedBox({
+          session: this.session!,
+          ctx,
+          animate: (mutate) => this.animatePanelHeight(mutate),
+        })
+      );
+    };
+
+    renderCollapsed();
+    return slot;
+  }
+
+  /**
+   * 面板长度柔和动画（design-system §1.5 例外条款）：
+   * 快照旧高 → 变更内容 → 设回旧高强制回流 → height:auto，
+   * 由 interpolate-size: allow-keywords 完成 px→auto 的 190ms 过渡。
+   */
+  private animatePanelHeight(mutate: () => void): void {
+    const panel = this.panelEl;
+    if (!panel) {
+      mutate();
+      return;
+    }
+    const h0 = panel.offsetHeight;
+    mutate();
+    panel.style.height = `${h0}px`;
+    void panel.offsetHeight; // 强制回流，确保过渡起点生效
+    panel.style.height = 'auto';
+    this.positionPanel();
+  }
+
   private savePanel(): void {
     if (!this.panelEl || !this.panelTarget) return;
     const textarea = this.panelEl.querySelector<HTMLTextAreaElement>('.pd-textarea')!;
@@ -310,23 +476,67 @@ export class PanelManager {
       h: Math.round(rect.height),
     };
 
+    // 本次会话的样式修改（同属性已合并），并入已有记录
+    const sessionChanges = this.session?.getChanges() ?? [];
+
     let saved: Annotation | undefined;
     if (this.panelExisting) {
-      saved = this.store.update(this.panelExisting.id, {
+      const before = this.panelExisting;
+      const patch = {
         note,
         summary: getElementSummary(target),
         viewportPos,
-      });
+        changes: mergeChanges(before.changes, sessionChanges),
+      };
+      saved = this.store.update(before.id, patch);
+      if (saved) {
+        const after = saved;
+        this.history.push({
+          label: 'annotation:update',
+          apply: () => {
+            applyChangesTo(this.resolveBySelector(after.selector), sessionChanges, 'new');
+            this.store.update(after.id, {
+              note: after.note,
+              summary: after.summary,
+              viewportPos: after.viewportPos,
+              changes: after.changes,
+            });
+          },
+          revert: () => {
+            applyChangesTo(this.resolveBySelector(after.selector), sessionChanges, 'old');
+            this.store.update(before.id, {
+              note: before.note,
+              summary: before.summary,
+              viewportPos: before.viewportPos,
+              changes: before.changes,
+            });
+          },
+        });
+      }
     } else {
       saved = this.store.add({
         selector: buildSelector(target),
         elementType: classifyElement(target),
         summary: getElementSummary(target),
         note,
-        changes: [],
+        changes: sessionChanges,
         viewportPos,
       });
+      const added = saved;
+      this.history.push({
+        label: 'annotation:add',
+        apply: () => {
+          applyChangesTo(this.resolveBySelector(added.selector), added.changes, 'new');
+          this.store.restore(added);
+        },
+        revert: () => {
+          applyChangesTo(this.resolveBySelector(added.selector), added.changes, 'old');
+          this.store.remove(added.id);
+        },
+      });
     }
+
+    this.panelCommitted = true;
     this.closePanel();
 
     // 卡片默认展开设置
@@ -337,10 +547,44 @@ export class PanelManager {
 
   closePanel(): void {
     if (!this.panelEl) return;
+    closeAllPopovers();
+    // 未保存 → 回滚本次会话的预览改动
+    if (this.session && !this.panelCommitted) {
+      this.session.rollback();
+    }
+    this.session = null;
+    this.panelCommitted = false;
     this.panelEl.remove();
     this.panelEl = null;
     this.panelTarget = null;
     this.panelExisting = null;
+  }
+
+  /** 删除标注：回退其已保存的样式修改 + 移除记录 + 进撤销历史 */
+  private deleteAnnotation(annotation: Annotation): void {
+    applyChangesTo(this.resolveBySelector(annotation.selector), annotation.changes, 'old');
+    this.store.remove(annotation.id);
+    this.history.push({
+      label: 'annotation:delete',
+      apply: () => {
+        applyChangesTo(this.resolveBySelector(annotation.selector), annotation.changes, 'old');
+        this.store.remove(annotation.id);
+      },
+      revert: () => {
+        applyChangesTo(this.resolveBySelector(annotation.selector), annotation.changes, 'new');
+        this.store.restore(annotation);
+      },
+    });
+  }
+
+  /** 按选择器唯一定位目标元素（定位不到返回 null，不乱改页面） */
+  private resolveBySelector(selector: string): Element | null {
+    try {
+      const matches = document.querySelectorAll(selector);
+      return matches.length === 1 ? matches[0] : null;
+    } catch {
+      return null;
+    }
   }
 
   // ---- 批注卡片 ----
@@ -381,7 +625,38 @@ export class PanelManager {
       card.appendChild(note);
     }
 
-    // 下半：调整项区（本任务 changes 恒空，隐藏）
+    // 下半：调整项区（有修改时显示，pd-diff 精简格式：原值 → 新值）
+    if (annotation.changes.length > 0) {
+      if (annotation.note) {
+        const hr = document.createElement('div');
+        hr.className = 'hr';
+        card.appendChild(hr);
+      }
+      const mods = document.createElement('div');
+      mods.className = 'mods';
+      mods.setAttribute('data-testid', 'pd-card-mods');
+      for (const change of annotation.changes) {
+        const row = document.createElement('div');
+        row.className = 'mod';
+        const k = document.createElement('span');
+        k.className = 'k';
+        const def = FIELD_DEFS[change.prop];
+        k.textContent = def ? t(def.labelKey) : change.prop;
+        row.appendChild(k);
+        const diff = document.createElement('span');
+        diff.className = 'pd-diff';
+        diff.appendChild(document.createTextNode(truncateValue(change.oldValue)));
+        const arrow = document.createElement('i');
+        arrow.textContent = '→';
+        diff.appendChild(arrow);
+        const to = document.createElement('b');
+        to.textContent = truncateValue(change.newValue);
+        diff.appendChild(to);
+        row.appendChild(diff);
+        mods.appendChild(row);
+      }
+      card.appendChild(mods);
+    }
 
     // 底栏：#位号·类型·位置 + 删除/修改
     const foot = document.createElement('div');
@@ -402,7 +677,7 @@ export class PanelManager {
     btnDelete.title = t('menu_delete_annotation');
     btnDelete.setAttribute('aria-label', t('menu_delete_annotation'));
     btnDelete.innerHTML = ICONS.trash;
-    btnDelete.addEventListener('click', () => this.store.remove(annotation.id));
+    btnDelete.addEventListener('click', () => this.deleteAnnotation(annotation));
     acts.appendChild(btnDelete);
 
     const btnEdit = document.createElement('button');
@@ -538,7 +813,7 @@ export class PanelManager {
     itemDelete.innerHTML = `${ICONS.trash}${t('menu_delete_annotation')}`;
     itemDelete.addEventListener('click', () => {
       this.closeMenu();
-      this.store.remove(annotation.id);
+      this.deleteAnnotation(annotation);
     });
     menu.appendChild(itemDelete);
 
@@ -568,13 +843,7 @@ export class PanelManager {
 
   /** 修改批注：重新定位目标元素后打开预填面板 */
   private editAnnotation(annotation: Annotation): void {
-    let target: Element | null = null;
-    try {
-      const matches = document.querySelectorAll(annotation.selector);
-      if (matches.length === 1) target = matches[0];
-    } catch {
-      target = null;
-    }
+    const target = this.resolveBySelector(annotation.selector);
     if (!target) return;
     this.openPanel(target, annotation);
   }
