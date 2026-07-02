@@ -45,6 +45,13 @@ npm run i18n:check  # validate language files
 - `manifest.json` 放 `public/`，用 `default_locale` + `__MSG_*__` 做中英文
 - 静态资源经 `web_accessible_resources` 暴露
 
+## Agent Routing
+
+- **主 session 职责**：任务拆分、规划、协调、审查、管理 git worktree 与合并。不直接执行实现任务。
+- **子代理委派**：将所有实现任务委派给子代理。大多数任务使用 background subagent 并行执行；仅当任务足够小且与当前上下文高度耦合时，才在主线程直接执行。
+- **子代理生命周期**：探索 → 规划 → 实现 → 检查 → 测试，循环直至任务完成，然后交由主 session 审查合并。任务足够简单时可省略中间过程。
+- **隔离策略**：每个任务在独立 git worktree 中运行，完成后再合并到主分支。
+
 ## 架构要点
 
 - **Shadow DOM 隔离**：所有页面内 UI 挂在一个 Shadow Root 下，分四层——Control（悬浮球/工具盘）、Panel（批注面板/卡片/设置/清空确认）、Overlay（hover 高亮/标签/选中框/区域框/位号圆/连线/移动预览/参考线）、Feedback（按钮内反馈/轻提示）。
