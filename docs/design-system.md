@@ -2,6 +2,7 @@
 
 > **定位**：PigeonDeck 的完整视觉语言参考。设计令牌从 pigeonlib 照搬，控件配方从 `preview/` 组件画廊提取。编码阶段以此文件为 UI 实现的单一真相源。
 > **源文件**：[preview/pigeonlib.css](../preview/pigeonlib.css)（设计令牌 + 控件配方）、[preview/pigeon-components.js](../preview/pigeon-components.js)（Web Components 控件原件）、[preview/index.html](../preview/index.html)（画廊宿主）。
+> **活文档**：[preview/design-system.html](../preview/design-system.html) — 令牌与配方的实时渲染版（随主题切换、链接画廊）。本 md 为文字规格，HTML 为可视核对。
 
 ---
 
@@ -67,6 +68,8 @@
 - 动画仅使用 `transform` 和 `opacity`，禁止触发 layout
 - 组件内禁止私自定义时长/缓动——统一引用 token
 - 不弹跳、不炫技
+
+**面板长度动画（例外）**：面板在切换分区/展开高级样式导致长度变化时，用 `height` 过渡（`--t-mid` 190ms）。`:root` 开 `interpolate-size: allow-keywords`，实现 `px → auto` 柔和过渡；实现时只需快照旧高度、设 `height:auto`，目标高由浏览器解析（无需 JS 量目标高度）。此为唯一允许过渡 `height` 的场景。
 
 ---
 
@@ -145,9 +148,10 @@
 
 ### 5.6 底栏 `.pfoot`
 - 布局：`space-between`，上下 `--cbg` 底色 + 上 `--cbd` 分隔线
-- 左侧：位号 · 元素类型 · 位置(px)，11px `--ctx2`
+- 左侧 `.lead`：（可选）选择粒度 `+/-` 胶囊 + 位号 · 元素类型 · 位置(px)，11px `--ctx2`
 - 右侧：删除按钮（圆形 iconbtn 危险色）+ 保存按钮（药丸 primary）
 - 无关闭按钮（面板靠 Esc / 点击外部 / 保存关闭）
+- **选择粒度 `+/-` 胶囊 `.pfoot .gran`**：仅「智能组件块」模式编辑面板出现，位于底栏最左（文字左侧）。视觉复用 `.pd-num .step` 小圆胶囊（`--chv` 底、20×19 按钮、Lucide plus/minus 13px）。`+` 沿 DOM 链取更大祖先容器、`−` 取更具体子元素；相对偏移记忆并应用到后续选择。只读调试面板不加。
 
 ### 5.7 文本按钮 `.pd-btn`
 - 形态：药丸形（`border-radius: 999px`），最小高度 30px
@@ -173,10 +177,15 @@
 - 自适应高度：`field-sizing: content`，最小高度 38px
 - 文字色：`--ctx`（保持可读）
 
-### 5.11 下拉 `.pd-select`
-- 形态：药丸形 + 右侧小圆球箭头（`--chv` 底 + chevron `--ctx2`）
-- 去原生箭头（`appearance: none`）
-- 选择器内部 padding-right 34px 为箭头留空
+### 5.11 下拉 `.pd-select`（触发钮）+ `.pd-dd`（浮层）
+- **触发钮 `.pd-select`**：药丸形 + 右侧小圆球箭头（`--chv` 底 + chevron `--ctx2`），去原生箭头，padding-right 34px。**非语言下拉一律不用系统原生 `<select>`**，用自制触发钮 + 自制浮层。
+- **浮层 `.pd-dd`**：圆角浮层，选项为胶囊行（`.pd-dd-item`，`--r` 999px，hover `--chv`，选中 `--c1-soft` + 勾）。**列表区至少露出 7 行**，超出滚动（`.pd-dd-scroll`）。
+- **智能识别栏**：字体/字重/边框等「值来自页面」的下拉，浮层顶部加一节 `智能识别`——采样该字段在选中元素**祖先链**上的实际 computed 值，去重、按频次取**前 5**，每项带 `识别` 角标；分隔线后接系统默认全量列表。采不到样本时该节自隐/缩短。列表样式/大小写等无从采样的字段只用统一浮层、不加智能栏。
+- 与调色盘「局部取色推荐取前 7」同族、数目不同（下拉取 5）。
+
+### 5.11a 语言选择器（界面语言 / 导出语言）
+- 触发钮同 `.pd-select`；浮层为**搜索选择器**：顶部搜索框（实时模糊/首字母/ISO 匹配）+ 胶囊形选项行（`border-radius: 999px`），命中字高亮 `--c1`。
+- **导出语言**与界面语言同款；浮层顶部钉「常用」组：**英文（默认）/ 跟随界面**，分隔线后为全量 BCP 47 列表。
 
 ### 5.12 数值控件 `.pd-num`
 - 形态：大胶囊（`border-radius: 999px`）+ 内部嵌套小圆胶囊 `+/−`
