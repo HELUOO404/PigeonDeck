@@ -34,6 +34,7 @@ import {
 } from './fields';
 import { createAdvancedBox } from './advanced-styles';
 import { closeAllPopovers } from './popover';
+import { SelectionResolver } from './selection';
 
 /* ---- SVG 图标（Lucide 风格，与 preview parts 07/11/26/35 一致） ---- */
 const ICONS = {
@@ -162,6 +163,7 @@ export class PanelManager {
   private settings: Settings;
   private history: History;
   private shadowHost: Element;
+  private resolver: SelectionResolver | null = null;
 
   // 批注面板（一次一个）
   private panelEl: HTMLElement | null = null;
@@ -337,6 +339,11 @@ export class PanelManager {
 
   // ---- 批注面板 ----
 
+  /** 注入 SelectionResolver（main.ts 在实例化后调用） */
+  setResolver(resolver: SelectionResolver): void {
+    this.resolver = resolver;
+  }
+
   /** 取消待定的单击延迟（dblclick 触发直接编辑时调用） */
   cancelPendingOpen(): void {
     if (this.pendingOpenTimer !== null) {
@@ -397,6 +404,53 @@ export class PanelManager {
 
     const lead = document.createElement('div');
     lead.className = 'lead';
+
+    // +/- 粒度胶囊：仅智能块基准（defaultGranularity==='smart'）显示（裁决12 #3）
+    if (this.resolver && this.settings.defaultGranularity === 'smart') {
+      const capsule = document.createElement('div');
+      capsule.className = 'pd-gran-capsule';
+      capsule.setAttribute('data-testid', 'pd-gran-capsule');
+
+      const btnMinus = document.createElement('button');
+      btnMinus.className = 'step-btn';
+      btnMinus.setAttribute('data-testid', 'pd-gran-minus');
+      btnMinus.setAttribute('aria-label', t('gran_narrow'));
+      btnMinus.textContent = '−';
+      btnMinus.addEventListener('click', () => {
+        this.resolver!.adjustOffset(-1);
+        // 重指向新目标：关当前面板、以新目标重开
+        if (this.panelTarget instanceof HTMLElement) {
+          const hitEl = this.panelTarget;
+          const newTarget = this.resolver!.resolve(hitEl);
+          this.panelCommitted = true; // 阻止 closePanel 回滚已存内容
+          this.closePanel();
+          const newExisting = this.store.getBySelector(buildSelector(newTarget));
+          this.openPanel(newTarget, newExisting ?? null);
+        }
+      });
+
+      const btnPlus = document.createElement('button');
+      btnPlus.className = 'step-btn';
+      btnPlus.setAttribute('data-testid', 'pd-gran-plus');
+      btnPlus.setAttribute('aria-label', t('gran_widen'));
+      btnPlus.textContent = '+';
+      btnPlus.addEventListener('click', () => {
+        this.resolver!.adjustOffset(1);
+        if (this.panelTarget instanceof HTMLElement) {
+          const hitEl = this.panelTarget;
+          const newTarget = this.resolver!.resolve(hitEl);
+          this.panelCommitted = true;
+          this.closePanel();
+          const newExisting = this.store.getBySelector(buildSelector(newTarget));
+          this.openPanel(newTarget, newExisting ?? null);
+        }
+      });
+
+      capsule.appendChild(btnMinus);
+      capsule.appendChild(btnPlus);
+      lead.appendChild(capsule);
+    }
+
     const meta = document.createElement('span');
     meta.className = 'meta';
     meta.textContent = metaText(number, elementType, x, y);

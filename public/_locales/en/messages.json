@@ -190,5 +190,7 @@
   "replace_media_change": { "message": "Media source", "description": "Card change-row label for image/video replacement" },
   "toast_media_unpersisted": { "message": "Large media replaced in memory only; won't survive a refresh", "description": "Toast when a replaced dataURL exceeds the persistence cap" },
   "region_note_placeholder": { "message": "Describe the region change…", "description": "Region annotation panel textarea placeholder" },
-  "region_label": { "message": "Region", "description": "Region annotation type label in card meta" }
+  "region_label": { "message": "Region", "description": "Region annotation type label in card meta" },
+  "gran_narrow": { "message": "Narrow selection (child element)", "description": "Granularity capsule: shrink to child element" },
+  "gran_widen": { "message": "Widen selection (parent element)", "description": "Granularity capsule: expand to parent element" }
 }

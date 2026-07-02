@@ -190,5 +190,7 @@
   "replace_media_change": { "message": "媒体源", "description": "卡片图片/视频替换调整项标签" },
   "toast_media_unpersisted": { "message": "大文件仅在内存中替换，刷新后不可恢复", "description": "替换的 dataURL 超过持久化上限时的轻提示" },
   "region_note_placeholder": { "message": "描述区域修改意见…", "description": "区域批注面板输入框占位文字" },
-  "region_label": { "message": "区域", "description": "区域批注类型标签（卡片底栏 meta）" }
+  "region_label": { "message": "区域", "description": "区域批注类型标签（卡片底栏 meta）" },
+  "gran_narrow": { "message": "收窄选中（向子元素）", "description": "粒度胶囊：收窄到子元素" },
+  "gran_widen": { "message": "扩大选中（向祖先）", "description": "粒度胶囊：扩展到祖先元素" }
 }
