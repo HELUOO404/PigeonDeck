@@ -1,12 +1,14 @@
 /* ============================================================
    main.ts — PigeonDeck content script 入口
-   Shadow DOM 宿主注入 + 四层结构 + 设计令牌
+   Shadow DOM 宿主注入 + 四层结构 + 设计令牌 + 工具盘
    ============================================================ */
 
 import designTokensCss from './design-tokens.css?inline';
 import baseCss from './base.css?inline';
 import { loadLocale } from './i18n';
 import { logger } from '../diagnostics/logger';
+import { Controller } from './controller';
+import { Toolbar } from './toolbar';
 
 // 防重复注入标记
 const HOST_ID = 'pd-host';
@@ -63,7 +65,12 @@ function inject(): void {
     shadow.appendChild(el);
   }
 
-  logger.info('Shadow DOM injected');
+  // 实例化 Controller + Toolbar
+  const controller = new Controller();
+  const controlLayer = shadow.querySelector<HTMLElement>('[data-layer="control"]')!;
+  new Toolbar(controller, controlLayer);
+
+  logger.info('Shadow DOM injected with toolbar');
 }
 
 async function main(): Promise<void> {

@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 2：工具盘与悬浮球（2026-07-02）
+
+- 模式控制器（`src/content/controller.ts`）：极简状态机 `mode: annotate/move/settings + expanded`，展开自动进入 annotate，move/settings 互斥，收起重置；瞬时动作回调挂点；subscribe() 订阅机制；24 个 vitest 单测全绿
+- 悬浮球（`src/content/toolbar.ts`）：42px 邮政金圆形底色 + 白色鸽子 SVG，阴影按 design-system §5.1，默认右下角 16px；点击展开，长按 ≥300ms 拖拽，位置持久化 localStorage，resize 夹紧，刷新恢复
+- 单列纵向工具盘：药丸容器（radius 999px、padding 5px、gap 3px），7 按钮（Logo/移动/复制文本/复制图片/撤销重做/清空/设置），SVG 图标从 preview part 02 完整照搬；撤销重做横向合并药丸（42×23），本阶段禁用占位
+- 激活态：move/settings 按钮 `--c1-soft` 底 + `--c1-edge` 边框 + 工具盘容器外描边；annotate 默认态无高亮
+- Tooltip：hover 显示（130ms），工具盘靠右边缘自动翻到左侧
+- 展开方向防截断（裁决12 #9）：向下空间不足时工具盘底边贴视口，内容超视口高则内部滚动（隐藏滚动条）
+- i18n：8 个 tooltip key（tb_logo / tb_move / tb_copy_text / tb_copy_image / tb_undo / tb_redo / tb_clear / tb_settings），中英双语同步，`i18n:check` 通过
+- E2E 测试基建（`tests/e2e/helpers/extension.ts` + `tests/fixtures/basic.html` + `playwright.config.ts`）：chromium 持久化上下文加载扩展，随机端口本地 HTTP 服务
+- E2E 测试：`tests/e2e/toolbar.spec.ts` 6 用例（球尺寸/位置、展开收起、tooltip、激活高亮、拖拽持久化、视口边界防截断）
+
 ### Coding — 阶段 1：工程骨架（2026-07-02）
 
 - Vite + TypeScript + MV3 工程落地：双配置顺序构建（content → IIFE，background → ES module），输出扁平 `dist/content.js` + `dist/background.js`
@@ -97,7 +109,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | Phase | Scope |
 |-------|-------|
 | ~~1~~ | ~~工程骨架：Vite + TS + MV3 + Shadow DOM 宿主 + 设计令牌移植~~ ✅ |
-| 2 | 工具盘与悬浮球：Logo 球 + 展开/收起 + 拖拽移位 + 位置持久化 |
+| ~~2~~ | ~~工具盘与悬浮球：Logo 球 + 展开/收起 + 拖拽移位 + 位置持久化~~ ✅ |
 | 3 | 批注模式：单击标注 + 修改栏 + 高级样式 + 调色盘 + 批注卡片/位号 |
 | 4 | 直接编辑：双击文本编辑 + 内联富文本浮条 + 图片/视频替换 |
 | 5 | 区域框选：长按 ≥300ms 拖拽 + 区域批注面板 |

@@ -1,6 +1,6 @@
 /* ============================================================
-   base.css — Shadow DOM 基元重置（骨架阶段最小集）
-   控件配方（.pd-* 类）后续阶段从 preview/pigeonlib.css 逐步搬入。
+   base.css — Shadow DOM 基元重置 + 工具盘控件配方
+   视觉值严格对照 preview/pigeonlib.css 与 docs/design-system.md。
    ============================================================ */
 
 /* :host 重置：清空 Shadow DOM 宿主默认样式 */
@@ -24,3 +24,262 @@
 [data-layer="panel"]    { z-index: 3; }
 [data-layer="overlay"]  { z-index: 2; }
 [data-layer="feedback"] { z-index: 5; }
+
+/* ============================================================
+   工具盘 & 悬浮球控件配方
+   来源：preview/pigeonlib.css + docs/design-system.md §5.1-5.4
+   ============================================================ */
+
+/* ---- 位置容器（工具盘/球 共用） ---- */
+.pd-wrapper {
+  position: fixed;
+  /* right/bottom 由 JS 动态设置 */
+  z-index: 0;
+  pointer-events: auto;
+  width: max-content;
+}
+
+/* ---- 悬浮球（收起态） ---- */
+.pd-ball {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: var(--c1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px -4px rgba(120,84,20,0.55), 0 1px 3px rgba(0,0,0,0.18);
+  color: #fdf6e6;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pd-ball svg {
+  width: 23px;
+  height: 23px;
+  pointer-events: none;
+}
+
+/* ---- 单列纵向工具盘（药丸容器） ---- */
+.pd-toolbar {
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--csf);
+  border: 1px solid var(--cbd);
+  box-shadow: var(--sh-up);
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  /* 超视口高度时内部滚动，隐藏滚动条 */
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.pd-toolbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* 激活态（move/settings 模式）：外描边 */
+.pd-toolbar.is-active {
+  border-color: var(--c1-edge);
+}
+
+/* 向上展开：translateY 调整使工具盘向上生长 */
+.pd-toolbar.open-upward {
+  position: relative;
+  /* 让工具盘底部与球位置对齐 */
+  bottom: 0;
+  transform: translateY(0); /* JS 动态调整不必用 CSS，依靠 wrapper 的 bottom 定位 */
+}
+
+/* ---- 工具盘按钮（圆形 38px） ---- */
+.pd-tbtn {
+  box-sizing: border-box;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ctx);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease),
+    border-color var(--t-fast) var(--ease);
+  position: relative;
+  padding: 0;
+  flex-shrink: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.pd-tbtn svg {
+  width: 20px;
+  height: 20px;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+
+.pd-tbtn:hover {
+  background: var(--chv);
+}
+
+/* Logo 按钮：金底浅羽，42px */
+.pd-tbtn.brand {
+  width: 42px;
+  height: 42px;
+  background: var(--c1);
+  color: #fdf6e6;
+}
+
+.pd-tbtn.brand:hover {
+  background: var(--c1);
+  filter: brightness(1.05);
+}
+
+.pd-tbtn.brand svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 激活态（move/settings 按钮高亮） */
+.pd-tbtn.active {
+  color: var(--c1);
+  background: var(--c1-soft);
+  border-color: var(--c1-edge);
+}
+
+/* 禁用态（撤销/重做本阶段占位） */
+.pd-tbtn.disabled,
+.pd-undoredo button.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- 合并撤销/重做（横向药丸 42×23，左撤销 右重做） ---- */
+.pd-undoredo {
+  box-sizing: border-box;
+  display: flex;
+  width: 42px;
+  height: 23px;
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid var(--cbd);
+  background: var(--csf);
+  flex-shrink: 0;
+}
+
+.pd-undoredo button {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ctx);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  padding: 0;
+  transition:
+    background var(--t-fast) var(--ease),
+    color var(--t-fast) var(--ease);
+}
+
+.pd-undoredo button svg {
+  width: 18px;
+  height: 18px;
+  pointer-events: none;
+}
+
+.pd-undoredo button:hover:not(:disabled) {
+  background: var(--chv);
+  color: var(--c1);
+}
+
+.pd-undoredo button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ---- Tooltip ---- */
+/*
+  默认：tooltip 在按钮右侧（.pd-toolbar.tip-right）
+  翻转：靠近视口右边缘时，tooltip 在左侧（.pd-toolbar.tip-left）
+*/
+.pd-tip {
+  position: absolute;
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+  padding: 5px 9px;
+  border-radius: 7px;
+  background: var(--ctx);
+  color: var(--csf);
+  font: 500 12px var(--font-ui);
+  box-shadow: var(--sh);
+  pointer-events: none;
+  /* 默认隐藏，hover 显示 */
+  opacity: 0;
+  transition: opacity var(--t-fast) var(--ease);
+  z-index: 1;
+}
+
+/* 右侧 tooltip：左边加箭头 */
+.pd-toolbar.tip-right .pd-tip {
+  left: calc(100% + 10px);
+}
+
+.pd-toolbar.tip-right .pd-tip::before {
+  content: "";
+  position: absolute;
+  right: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-right-color: var(--ctx);
+}
+
+/* 左侧 tooltip：右边加箭头 */
+.pd-toolbar.tip-left .pd-tip {
+  right: calc(100% + 10px);
+  left: auto;
+}
+
+.pd-toolbar.tip-left .pd-tip::before {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: var(--ctx);
+}
+
+/* 悬浮球的 tooltip（始终在左侧） */
+.pd-ball .pd-tip {
+  right: calc(100% + 10px);
+  left: auto;
+}
+
+.pd-ball .pd-tip::before {
+  content: "";
+  position: absolute;
+  left: 100%;
+  top: 50%;
+  transform: translateY(-50%);
+  border: 5px solid transparent;
+  border-left-color: var(--ctx);
+}
+
+/* hover 触发显示 tooltip */
+.pd-tbtn:hover .pd-tip,
+.pd-ball:hover .pd-tip {
+  opacity: 1;
+}
