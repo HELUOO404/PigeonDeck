@@ -66,12 +66,21 @@
     </div>
   </div>
 
+  <div class="card" id="card-link">
+    <a id="link-nav" href="basic.html?nav=1">Read the documentation</a>
+  </div>
+
   <div class="card" id="card-mixed">
     <h2 style="font-size:16px;margin:0 0 8px;">Mixed Content Card</h2>
     <p>Card with mixed content types for testing element selection.</p>
     <div style="background:#e9ecf2;width:200px;height:120px;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#666;">
       Image placeholder
     </div>
+  </div>
+
+  <!-- Unknown element (no text, no children) → classifies as "other" for auto-adapt modbar -->
+  <div class="card" id="card-deco">
+    <div id="deco-strip" style="height:40px;background:#e0d8c8;border-radius:8px;"></div>
   </div>
 
   <!-- Extra space to test scroll + toolbar boundary behavior -->

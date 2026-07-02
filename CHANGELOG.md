@@ -11,6 +11,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 3b：修改栏与高级样式（2026-07-02）
+
+- 属性控件注册表（`src/content/fields.ts`）：`FIELD_DEFS` 全集单一真相源（文字/字号/字重/颜色/对齐/装饰/行高/字距/列表/大小写/宽高/显示/溢出/背景/边框/圆角/阴影/透明度/模糊/内外边距…）；`FieldsSession` **双入口单源**——修改栏（按元素类型的高频子集）与高级样式（全集）实例化同一 field 时共享当前值与监听，改一处两处同步；控件改动即时 inline 预览 + 基线快照，`getChanges` 同属性合并为一条（最初 oldValue、最新 newValue，改回原值自动剔除）
+- 修改栏智能切换（`buildModbox`）：文本 / 图片视频 / 按钮容器分别列高频控件；陌生元素（other）按 computed style 动态挑前 4 项并挂「自动」角标 + 自动适配说明条
+- 高级样式折叠区（`src/content/advanced-styles.ts`）：4 分类左导航（排版 / 尺寸 / 外观 / 调试）+ 变更角标计数；折叠/展开与切分类走面板高度柔和动画（px→auto，`interpolate-size` 190ms）；调试分类 = 只读 computed + DOM 信息 readout，默认全英文，点翻译图标就地切中文标签（值保持原样）
+- 自制下拉浮层（`src/content/dropdown.ts`）：≥7 行可见滚动；字体/字重/边框类字段顶部智能识别栏 = 祖先链 computed 采样去重取频次前 5，采不到自隐
+- 调色盘浮层（`src/content/color-picker.ts`）：收起色块 → 展开取色器（饱和度面板 + 色相条）+ 局部推荐色前 7（页面采样）+ RGB/HEX + 透明度滑杆 + EyeDropper 取色
+- 样式修改管线：控件 → inline style 即时预览 → `StyleChange{prop, cssProp, oldValue, newValue}` → 保存写入 `annotation.changes`（`mergeChanges` 合并）→ push 撤销历史命令；**未保存关面板（点外部）回滚本次会话全部预览**（原本无内联样式的属性回滚为移除，非留空）；删除标注回退其已保存样式并进撤销历史
+- 批注卡片调整项：卡片下半区渲染「原值 → 新值」精简 diff 行（`.pd-diff`），字段名走 i18n 标签，超长值截断
+- 撤销历史（`src/state/history.ts`）：命令模式 `{label, apply, revert}`，push 不重复执行动作，新命令清空 redo 栈，默认上限 50；10 个单测
+- 控件配方移植（`src/content/base.css`）：下拉 / 数值胶囊 / 分段 / 颜色 / 导航 / 调色盘 / 调试 readout 逐值照搬画廊
+- i18n：新增高级样式 / 控件 / 选项 / 提示大批文案 key，中英双语同步
+- 单测：`fields.test.ts`（21）+ `dropdown.test.ts`（12）+ `color-picker.test.ts`（9）+ `history.test.ts`（10）+ annotations `StyleChange`/`mergeChanges`/`restore` 扩充
+- E2E：`tests/e2e/style-edit.spec.ts` 6 用例（排版修改栏即时改字号、调色盘推荐色改背景→保存→卡片调整项行、高级样式 4 分类切换 + 字体下拉智能识别栏、未保存关面板回滚、陌生元素「自动」角标控件、调试分类英中翻译切换），时序断言全部轮询；夹具页新增陌生元素卡
+
+### Coding — 阶段 3a：批注核心链路（2026-07-02）
+
+- DOM 工具（`src/shared/dom-utils.ts`）：`buildSelector` 稳定唯一选择器（id 锚点 → 唯一 class 组合 → nth-of-type 链，软深度上限 + querySelector 唯一性验证，跳过 css-hash 噪音类）；`classifyElement` 六类元素分类（text/image/video/button/container/other）；`getElementSummary` / `isVisible`；23 个 vitest 单测全绿
+- 标注状态层（`src/state/annotations.ts`）：Annotation 数据模型（changes 预留 3b 填充）+ Store（add/update/remove/clear/getAll/getBySelector + subscribe 订阅）；**编号规则全实现：递增分配、删除不重排、清空后从 1 重置**；28 个单测覆盖编号规则/增删改查/序列化往返
+- 会话持久化（`src/state/session.ts`）：sessionStorage 天然匹配 tab 会话（刷新在、关 tab 清），key = `pigeondeck:` + 完整 URL，序列化顶层按 pageKey 组织（V2 多页扩展点）；store 变化 300ms 防抖写入，解绑冲刷
+- 极简设置（`src/state/settings.ts`）：chrome.storage.local 存取，本阶段 `hoverLabel: true` + `cardDefaultExpanded: false` 两项，默认值合并留好扩展
+- 覆盖层（`src/content/overlay.ts`）：批注模式 hover 高亮框（`--c1-edge` 1.5px + `--c1-soft` 底）+ 元素标签（9px 白字深色半透明底 + `--c1` 描边，显示 tagName 跟随鼠标，settings.hoverLabel 控制）；已保存标注渲染标注框（`--c1` 1.5px 圆角 6px）+ 位号圆（22px 金底白字，左上角）；**跟随机制**：scroll（capture 段含嵌套滚动）/resize rAF 节流 + ResizeObserver + MutationObserver 兜底；目标元素消失隐藏 UI 保留数据、自动尝试重解析；composedPath 过滤自身 Shadow UI
+- 批注面板（`src/content/panel.ts`）：单击页面元素弹出（capture 段拦截 click/mousedown，阻止链接跳转等页面默认行为）；结构 = 批注 textarea（field-sizing 自适应高度）+ 底栏（`#位号 · 元素类型 · x,y px` + 删除/保存）；四向翻转避让视口（右→下→左→上）；点外部关闭放弃未保存内容；已有标注再单击预填内容
+- 批注卡片：点位号圆展开/收起（`.pd-surface` 卡片：批注文本 + 底栏删除/修改），默认展开态读 settings.cardDefaultExpanded；四向翻转防截断，放不下夹紧视口并画 `.pd-connector` 虚线连回位号圆；跟随目标元素滚动
+- 位号圆右键菜单：`.pd-menu` 上弹（修改批注 / 删除批注危险色），点外部关闭；删除不重排编号，新标注继续用下一个号
+- 恢复与轻提示：注入时按 selector 重新定位挂标注 UI，找不到的目标数据保留、UI 跳过，feedback 层 `.pd-toast` 轻提示「N 条标注未能定位」（190ms 进出，2.5s 自动消失）
+- i18n：新增 5 个批注文案 key（panel_note_placeholder / panel_save / menu_edit_annotation / menu_delete_annotation / toast_restore_missing），中英双语同步
+- E2E 测试：`tests/e2e/annotation.spec.ts` 6 用例（hover 高亮+标签、单击面板保存出位号、卡片开合、右键菜单删除+编号不复用、刷新恢复、链接点击拦截不导航），时序断言全部轮询；夹具页新增带 href 链接卡
+- 测试基建：引入 jsdom（DOM 类单测环境，per-file `@vitest-environment` 注解）
+
 ### Coding — 阶段 2：工具盘与悬浮球（2026-07-02）
 
 - 模式控制器（`src/content/controller.ts`）：极简状态机 `mode: annotate/move/settings + expanded`，展开自动进入 annotate，move/settings 互斥，收起重置；瞬时动作回调挂点；subscribe() 订阅机制；24 个 vitest 单测全绿
@@ -110,7 +140,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 |-------|-------|
 | ~~1~~ | ~~工程骨架：Vite + TS + MV3 + Shadow DOM 宿主 + 设计令牌移植~~ ✅ |
 | ~~2~~ | ~~工具盘与悬浮球：Logo 球 + 展开/收起 + 拖拽移位 + 位置持久化~~ ✅ |
-| 3 | 批注模式：单击标注 + 修改栏 + 高级样式 + 调色盘 + 批注卡片/位号 |
+| ~~3~~ | ~~批注模式：单击标注 + 修改栏 + 高级样式 + 调色盘 + 批注卡片/位号~~ ✅ |
 | 4 | 直接编辑：双击文本编辑 + 内联富文本浮条 + 图片/视频替换 |
 | 5 | 区域框选：长按 ≥300ms 拖拽 + 区域批注面板 |
 | 6 | 移动模式：选中 + 拖拽 + 吸附/参考线 + 八向缩放句柄 |

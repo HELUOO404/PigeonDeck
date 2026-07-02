@@ -1,14 +1,21 @@
 /* ============================================================
    main.ts — PigeonDeck content script 入口
-   Shadow DOM 宿主注入 + 四层结构 + 设计令牌 + 工具盘
+   Shadow DOM 宿主注入 + 四层结构 + 设计令牌 + 工具盘 + 批注链路
    ============================================================ */
 
 import designTokensCss from './design-tokens.css?inline';
 import baseCss from './base.css?inline';
-import { loadLocale } from './i18n';
+import { loadLocale, t } from './i18n';
 import { logger } from '../diagnostics/logger';
 import { Controller } from './controller';
 import { Toolbar } from './toolbar';
+import { Overlay } from './overlay';
+import { PanelManager } from './panel';
+import { Toast } from './toast';
+import { AnnotationStore, Annotation } from '../state/annotations';
+import { History } from '../state/history';
+import { restoreSession, bindSessionPersistence } from '../state/session';
+import { loadSettings, Settings } from '../state/settings';
 
 // 防重复注入标记
 const HOST_ID = 'pd-host';
@@ -24,7 +31,7 @@ export function setTheme(theme: Theme): void {
   }
 }
 
-function inject(): void {
+function inject(settings: Settings): void {
   // 防重复注入
   if (document.getElementById(HOST_ID)) {
     logger.debug('already injected, skipping');
@@ -70,12 +77,55 @@ function inject(): void {
   const controlLayer = shadow.querySelector<HTMLElement>('[data-layer="control"]')!;
   new Toolbar(controller, controlLayer);
 
-  logger.info('Shadow DOM injected with toolbar');
+  // 批注链路：Store + 会话恢复 + 覆盖层 + 面板 + 轻提示
+  const panelLayer = shadow.querySelector<HTMLElement>('[data-layer="panel"]')!;
+  const overlayLayer = shadow.querySelector<HTMLElement>('[data-layer="overlay"]')!;
+  const feedbackLayer = shadow.querySelector<HTMLElement>('[data-layer="feedback"]')!;
+
+  const store = new AnnotationStore();
+  const restored = restoreSession();
+  if (restored) store.load(restored);
+  bindSessionPersistence(store);
+
+  // 撤销/重做历史栈（默认 50 步；按钮/快捷键接线在阶段 7）
+  const history = new History();
+
+  const toast = new Toast(feedbackLayer);
+
+  // Overlay 与 PanelManager 互相引用：先建 Overlay（hooks 后挂），再建 PanelManager
+  const hooks: {
+    onPinClick?: (a: Annotation) => void;
+    onPinContextMenu?: (a: Annotation, pinEl: HTMLElement) => void;
+  } = {};
+  const overlay = new Overlay(controller, store, overlayLayer, settings, {
+    onPinClick: (a) => hooks.onPinClick?.(a),
+    onPinContextMenu: (a, pinEl) => hooks.onPinContextMenu?.(a, pinEl),
+  });
+  const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings, history);
+  hooks.onPinClick = panelManager.togglePinCard;
+  hooks.onPinContextMenu = panelManager.openPinMenu;
+
+  // 恢复后：未能定位的标注数据保留、UI 跳过，轻提示
+  if (restored && restored.annotations.length > 0) {
+    const missing = overlay.getUnresolvedCount();
+    if (missing > 0) {
+      toast.show(t('toast_restore_missing').replace('{n}', String(missing)));
+    }
+    // 卡片默认展开设置：为可定位的标注展开卡片
+    if (settings.cardDefaultExpanded) {
+      for (const a of store.getAll()) {
+        if (overlay.getTargetRect(a.id)) panelManager.openCard(a);
+      }
+    }
+  }
+
+  logger.info('Shadow DOM injected with toolbar + annotation');
 }
 
 async function main(): Promise<void> {
   await loadLocale();
-  inject();
+  const settings = await loadSettings();
+  inject(settings);
 }
 
 main().catch((err) => logger.error('init failed', err));
