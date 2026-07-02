@@ -38,5 +38,25 @@
   "tb_settings": {
     "message": "设置",
     "description": "工具盘设置按钮提示"
+  },
+  "panel_note_placeholder": {
+    "message": "填写批注说明…",
+    "description": "批注面板文本框占位提示"
+  },
+  "panel_save": {
+    "message": "保存",
+    "description": "批注面板保存按钮"
+  },
+  "menu_edit_annotation": {
+    "message": "修改批注",
+    "description": "位号圆右键菜单 / 卡片修改按钮"
+  },
+  "menu_delete_annotation": {
+    "message": "删除批注",
+    "description": "位号圆右键菜单 / 卡片删除按钮"
+  },
+  "toast_restore_missing": {
+    "message": "{n} 条标注未能定位，已跳过显示（任务记录保留）",
+    "description": "恢复后部分标注目标缺失时的轻提示"
   }
 }

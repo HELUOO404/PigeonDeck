@@ -38,5 +38,25 @@
   "tb_settings": {
     "message": "Settings",
     "description": "Toolbar settings button tooltip"
+  },
+  "panel_note_placeholder": {
+    "message": "Add a note…",
+    "description": "Annotation panel textarea placeholder"
+  },
+  "panel_save": {
+    "message": "Save",
+    "description": "Annotation panel save button"
+  },
+  "menu_edit_annotation": {
+    "message": "Edit annotation",
+    "description": "Pin context menu / card edit action"
+  },
+  "menu_delete_annotation": {
+    "message": "Delete annotation",
+    "description": "Pin context menu / card delete action"
+  },
+  "toast_restore_missing": {
+    "message": "{n} annotation(s) could not be located; UI skipped, records kept",
+    "description": "Toast shown after restore when some annotation targets are missing"
   }
 }
