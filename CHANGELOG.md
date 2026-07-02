@@ -9,8 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **当前阶段：设计完成，编码刚开始。** 以下为设计阶段产出的完整记录。
-> V1 首个版本号将在功能闭环完成后确定。
+> **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
+
+### Coding — 阶段 1：工程骨架（2026-07-02）
+
+- Vite + TypeScript + MV3 工程落地：双配置顺序构建（content → IIFE，background → ES module），输出扁平 `dist/content.js` + `dist/background.js`
+- `manifest.json`（MV3）：`__MSG_*__` 国际化、`default_locale: en`、`storage` 权限、自托管 `update_url` 占位（裁决12 #2）
+- Shadow DOM 宿主注入：防重复注入 + 四层容器（Control / Panel / Overlay / Feedback）+ `setTheme()` 亮暗切换出口
+- pigeonlib 设计令牌完整移植（`src/content/design-tokens.css`，亮/暗双主题变量 + `interpolate-size: allow-keywords`），逐值与画廊比对一致
+- i18n 运行时（构建期打包语言 JSON，运行时可切换，缺失回退 en）+ `scripts/i18n-check.mjs` 完整性校验
+- 品牌资产：`public/brand/logo.svg`（画廊鸽子线稿提取）+ 四尺寸 icon PNG（sharp 生成，邮政金圆底）
+- 极简分级 logger；vitest 单测 9 例全绿；`build` / `typecheck` / `test` / `i18n:check` 四门禁全过
 
 ### Design System — pigeonlib
 
@@ -87,7 +96,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 | Phase | Scope |
 |-------|-------|
-| 1 | 工程骨架：Vite + TS + MV3 + Shadow DOM 宿主 + 设计令牌移植 |
+| ~~1~~ | ~~工程骨架：Vite + TS + MV3 + Shadow DOM 宿主 + 设计令牌移植~~ ✅ |
 | 2 | 工具盘与悬浮球：Logo 球 + 展开/收起 + 拖拽移位 + 位置持久化 |
 | 3 | 批注模式：单击标注 + 修改栏 + 高级样式 + 调色盘 + 批注卡片/位号 |
 | 4 | 直接编辑：双击文本编辑 + 内联富文本浮条 + 图片/视频替换 |

@@ -4,14 +4,13 @@
 
 ## 仓库当前阶段
 
-**编码阶段刚开始**。设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），V1 实施计划已确定（[docs/v1-plan.md](docs/v1-plan.md)），工程骨架搭建是第一项任务。
+**编码阶段进行中**。设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施。**阶段 1（工程骨架）已完成**：Vite 双配置构建（content IIFE + background ES）、Shadow DOM 四层宿主、pigeonlib 设计令牌、i18n 框架、logger 均已落地。
 
 当前根目录有：
+- `src/` + `public/` + `scripts/` — 扩展源码、静态资源（manifest/_locales/icons/brand）、构建脚本
 - `docs/` — V1 实施计划、设计系统、UI 预览裁决记录、项目规范
 - `context/` — 构想蓝图文件（`构想蓝图2.md` 为产品规格的完整定义）
 - `preview/` — UI 组件画廊（设计阶段产物，含设计令牌 CSS 和 Web Components 原件）
-
-根目录**尚无** `package.json`、`src/`、`manifest.json`，这些将在阶段 1（工程骨架）创建。
 
 ## PigeonDeck 是什么
 
@@ -78,3 +77,4 @@ npm run i18n:check  # validate language files
 - **以 v1-plan.md 为实施准则**：编码阶段以 [docs/v1-plan.md](docs/v1-plan.md) 和 [context/构想蓝图2.md](context/构想蓝图2.md) 为准。设计细节见 [docs/design-system.md](docs/design-system.md)。
 - **Git 提交**：每完成一个细分功能提交一次。提交信息用中文。
 - **测试门禁**：`npm test` 全过 + 核心 E2E 全绿后方可合并。
+- **CHANGELOG 维护**：每完成一个实施阶段，合并回 main 前在 [CHANGELOG.md](CHANGELOG.md) 的 `[Unreleased]` 段新增该阶段小节（中文，记录用户可见变化与关键架构落地），并勾掉「Future — Planned for v1.0.0」表中对应行。
