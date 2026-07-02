@@ -313,13 +313,6 @@ export class Toolbar {
     this.dragStartPointer = { x: e.clientX, y: e.clientY };
     this.dragStartPos = { ...this.pos };
 
-    this.longPressTimer = setTimeout(() => {
-      this.dragActive = true;
-      this.wrapper.setPointerCapture(e.pointerId);
-      this.wrapper.addEventListener('pointermove', this.onPointerMove);
-      this.wrapper.addEventListener('pointerup', this.onPointerUp);
-    }, LONG_PRESS_MS);
-
     // 取消时清定时器
     const cancelOnce = (): void => {
       if (this.longPressTimer) {
@@ -336,6 +329,17 @@ export class Toolbar {
       const dy = Math.abs(pe.clientY - this.dragStartPointer.y);
       if (dx > 4 || dy > 4) cancelOnce();
     };
+
+    this.longPressTimer = setTimeout(() => {
+      // 长按达成 → 进入拖拽。监听挂 window（捕获阶段）：
+      // 不依赖 setPointerCapture（从 setTimeout 内调用时机不可靠），
+      // 光标移出元素/Shadow DOM 也能持续收到事件。
+      el.removeEventListener('pointerup', cancelOnce);
+      el.removeEventListener('pointermove', checkMove);
+      this.dragActive = true;
+      window.addEventListener('pointermove', this.onPointerMove, true);
+      window.addEventListener('pointerup', this.onPointerUp, true);
+    }, LONG_PRESS_MS);
 
     el.addEventListener('pointerup', cancelOnce, { once: true });
     el.addEventListener('pointermove', checkMove);
@@ -363,8 +367,8 @@ export class Toolbar {
     if (!this.dragActive) return;
 
     this.dragActive = false;
-    this.wrapper.removeEventListener('pointermove', this.onPointerMove);
-    this.wrapper.removeEventListener('pointerup', this.onPointerUp);
+    window.removeEventListener('pointermove', this.onPointerMove, true);
+    window.removeEventListener('pointerup', this.onPointerUp, true);
 
     if (this.dragMoved) {
       savePos(this.pos);

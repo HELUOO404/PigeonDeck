@@ -129,19 +129,23 @@ test('③ hover shows tooltip', async () => {
   const rect = await getShadowElementRect(page, 'pd-btn-move');
   expect(rect).not.toBeNull();
   await page.mouse.move(rect!.x + rect!.width / 2, rect!.y + rect!.height / 2);
-  await page.waitForTimeout(250); // wait for tooltip transition
+  // 抖动 1px 确保 hover 事件在动画后仍然触发
+  await page.mouse.move(rect!.x + rect!.width / 2 + 1, rect!.y + rect!.height / 2);
 
-  // Tooltip should be visible (opacity > 0.5)
-  const tooltipVisible = await page.evaluate(() => {
-    const host = document.getElementById('pd-host');
-    if (!host?.shadowRoot) return false;
-    const btn = host.shadowRoot.querySelector('[data-testid="pd-btn-move"]');
-    if (!btn) return false;
-    const tip = btn.querySelector('.pd-tip') as HTMLElement | null;
-    if (!tip) return false;
-    return parseFloat(getComputedStyle(tip).opacity) > 0.5;
-  });
-  expect(tooltipVisible).toBe(true);
+  // Tooltip visible (opacity > 0.5) — 轮询等待，避免对过渡时长的固定假设
+  await page.waitForFunction(
+    () => {
+      const host = document.getElementById('pd-host');
+      if (!host?.shadowRoot) return false;
+      const btn = host.shadowRoot.querySelector('[data-testid="pd-btn-move"]');
+      if (!btn) return false;
+      const tip = btn.querySelector('.pd-tip') as HTMLElement | null;
+      if (!tip) return false;
+      return parseFloat(getComputedStyle(tip).opacity) > 0.5;
+    },
+    undefined,
+    { timeout: 3000 }
+  );
 
   await page.close();
 });
