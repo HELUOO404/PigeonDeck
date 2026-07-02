@@ -93,9 +93,10 @@ function placeNear(anchor: DOMRect, w: number, h: number, gap = PLACE_GAP): Plac
   return { left: clampLeft(anchor.right + gap), top: clampTop(anchor.top), fits: false };
 }
 
-/** 底栏 meta 文案：#位号 · 元素类型 · x,y(px) */
-function metaText(number: number, elementType: string, x: number, y: number): string {
-  return `#${number} · ${elementType} · ${x},${y}px`;
+/** 底栏 meta 文案：#位号 · 元素类型/区域标签 · x,y(px) */
+function metaText(number: number, elementType: string, x: number, y: number, isRegion = false): string {
+  const typeLabel = isRegion ? t('region_label') : elementType;
+  return `#${number} · ${typeLabel} · ${x},${y}px`;
 }
 
 /**
@@ -185,6 +186,9 @@ export class PanelManager {
 
   // 内联编辑拦截豁免：当前编辑元素（DirectEditManager 设置）
   private inlineEditEl: HTMLElement | null = null;
+
+  // 区域框选完成后抑制一次 click（避免松手触发元素面板）
+  private suppressClick = false;
 
   private active = false;
   private unsubscribeStore: () => void;
@@ -284,6 +288,14 @@ export class PanelManager {
   private onClick = (ev: MouseEvent): void => {
     if (!this.active || this.isOwnUi(ev)) return;
 
+    // 区域框选松手后抑制该次 click，避免误开元素面板
+    if (this.suppressClick) {
+      this.suppressClick = false;
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
+
     // 内联编辑豁免：落在正在编辑元素上的点击直接放行
     if (this.inlineEditEl && ev.composedPath().includes(this.inlineEditEl)) return;
 
@@ -332,6 +344,11 @@ export class PanelManager {
       this.pendingOpenTimer = null;
     }
     this.pendingOpenTarget = null;
+  }
+
+  /** 区域框选松手后抑制一次 click，避免误开元素批注面板 */
+  suppressNextClick(): void {
+    this.suppressClick = true;
   }
 
   /** 内联编辑豁免：DirectEditManager 进入/退出编辑时设置 */
@@ -753,7 +770,7 @@ export class PanelManager {
     const meta = document.createElement('span');
     meta.className = 'meta';
     const { x, y } = annotation.viewportPos;
-    meta.textContent = metaText(annotation.number, annotation.elementType, x, y);
+    meta.textContent = metaText(annotation.number, annotation.elementType, x, y, annotation.kind === 'region');
     foot.appendChild(meta);
 
     const acts = document.createElement('span');

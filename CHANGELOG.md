@@ -11,6 +11,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 5：区域框选（2026-07-03）
+
+- 长按框选（`src/content/region-select.ts`）：批注模式下长按 ≥300ms（`LONG_PRESS_MS` 常量，阶段 11 接设置）→ 拖拽实时品牌金框（`.pd-region` 半透明预览）→ 松手弹小型区域批注面板（照搬 preview part 08 `.rpanel`：自适应 textarea + 保存/删除）；松手后 `suppressNextClick` 抑制紧随的 click，避免误开元素面板；小于 6px 视为误触取消
+- 区域数据模型（`src/state/annotations.ts`）：Annotation 新增可选 `kind?: 'element' | 'region'` + `region?: { docRect, elements }`（向后兼容旧数据，无 kind = 元素）；区域记录 docRect（文档坐标，跨滚动复现）+ 框内可见元素选择器列表（`isVisible` + 矩形相交，上限 30，供复制文本 AI 精准定位）；**区域批注与元素标注共用同一套编号系统**（递增/删除不重排/清空重置天然生效）
+- 覆盖层区域渲染（`src/content/overlay.ts`）：按 `kind` 分支——区域用 `.pd-region` 框（不建 markbox、不解析目标元素、不挂 ResizeObserver），位号贴区域左上角；滚动/resize 时按 `docRect − scroll` 跟随、恒可见；区域标注不计入「未定位」轻提示
+- 撤销历史：区域批注保存/删除均进撤销栈（apply=restore、revert=remove）；卡片底栏 meta 用「区域 / Region」标签替代元素类型
+- i18n：新增 `region_note_placeholder`、`region_label`，中英双语
+- 单测：区域标注模型 4 条（kind/region 字段保留、编号接续元素、序列化往返、旧数据兼容）
+- E2E：`tests/e2e/region.spec.ts` 3 用例（长按拖出实时金框→弹面板、保存后持久区域框+位号、区域编号接续元素编号），长按用轮询等金框出现、时序断言全部轮询
+
 ### Coding — 阶段 4：直接编辑与内联富文本（2026-07-03）
 
 - 双击文本内联编辑（`src/content/direct-edit.ts`）：双击文本元素 → 目标临时 `contentEditable` 进入页内编辑（进入前快照 `innerHTML`）；blur/点外部提交、Esc 取消（恢复快照）；内容变化记为 `StyleChange{cssProp:'html'}` 并入该元素标注（无则新建 note 空标注）→ push 撤销历史（revert 恢复快照）
@@ -155,7 +165,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | ~~2~~ | ~~工具盘与悬浮球：Logo 球 + 展开/收起 + 拖拽移位 + 位置持久化~~ ✅ |
 | ~~3~~ | ~~批注模式：单击标注 + 修改栏 + 高级样式 + 调色盘 + 批注卡片/位号~~ ✅ |
 | ~~4~~ | ~~直接编辑：双击文本编辑 + 内联富文本浮条 + 图片/视频替换~~ ✅ |
-| 5 | 区域框选：长按 ≥300ms 拖拽 + 区域批注面板 |
+| ~~5~~ | ~~区域框选：长按 ≥300ms 拖拽 + 区域批注面板~~ ✅ |
 | 6 | 移动模式：选中 + 拖拽 + 吸附/参考线 + 八向缩放句柄 |
 | 7 | 撤销/重做：合并按钮 + 全操作覆盖 + Ctrl+Z / Ctrl+Shift+Z |
 | 8 | 复制文本：Codex/AI 任务清单生成 + 去重合并 |

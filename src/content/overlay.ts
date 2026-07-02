@@ -18,11 +18,13 @@ export interface OverlayHooks {
 /** 单条标注的覆盖 UI 记录 */
 interface MarkEntry {
   annotation: Annotation;
-  /** 解析到的目标元素（找不到为 null，数据保留、UI 隐藏） */
+  /** 解析到的目标元素（找不到为 null，数据保留、UI 隐藏）；区域标注始终为 null */
   target: Element | null;
   markbox: HTMLElement;
   pin: HTMLElement;
   resizeObserver: ResizeObserver | null;
+  /** 标注类型：true = 区域标注 */
+  isRegion: boolean;
 }
 
 /** 标注框相对目标元素外扩 3px（preview part 06：inset:-3px） */
@@ -130,10 +132,11 @@ export class Overlay {
     if (!settings.hoverLabel) this.hoverLabel.style.display = 'none';
   }
 
-  /** 未能定位目标元素的标注数（恢复后轻提示用） */
+  /** 未能定位目标元素的标注数（恢复后轻提示用）；区域标注始终可定位，不计入 */
   getUnresolvedCount(): number {
     let count = 0;
     for (const entry of this.entries.values()) {
+      if (entry.isRegion) continue;
       if (!entry.target || !entry.target.isConnected) count++;
     }
     return count;
@@ -142,12 +145,32 @@ export class Overlay {
   /** 某标注目标元素的当前视口矩形（面板/卡片定位用） */
   getTargetRect(annotationId: string): DOMRect | null {
     const entry = this.entries.get(annotationId);
-    if (!entry?.target?.isConnected) return null;
+    if (!entry) return null;
+    // 区域标注：根据 docRect 计算当前视口矩形
+    if (entry.isRegion && entry.annotation.region) {
+      const { docRect } = entry.annotation.region;
+      return new DOMRect(
+        docRect.x - window.scrollX,
+        docRect.y - window.scrollY,
+        docRect.w,
+        docRect.h
+      );
+    }
+    if (!entry.target?.isConnected) return null;
     return entry.target.getBoundingClientRect();
   }
 
   /** 某标注位号圆的当前视口矩形（卡片/菜单锚点用，由目标矩形推算，不依赖渲染时序） */
   getPinRect(annotationId: string): DOMRect | null {
+    const entry = this.entries.get(annotationId);
+    if (!entry) return null;
+    // 区域标注：pin 贴区域左上角
+    if (entry.isRegion && entry.annotation.region) {
+      const { docRect } = entry.annotation.region;
+      const vpX = docRect.x - window.scrollX;
+      const vpY = docRect.y - window.scrollY;
+      return new DOMRect(vpX - PIN_OFFSET, vpY - PIN_OFFSET, 22, 22);
+    }
     const rect = this.getTargetRect(annotationId);
     if (!rect) return null;
     return new DOMRect(
@@ -261,9 +284,17 @@ export class Overlay {
   }
 
   private createEntry(annotation: Annotation): MarkEntry {
+    const isRegion = annotation.kind === 'region';
+
+    // 区域标注：用 .pd-region 框；元素标注：用 .pd-markbox
     const markbox = document.createElement('div');
-    markbox.className = 'pd-markbox';
-    markbox.setAttribute('data-testid', 'pd-markbox');
+    if (isRegion) {
+      markbox.className = 'pd-region';
+      markbox.setAttribute('data-testid', 'pd-region');
+    } else {
+      markbox.className = 'pd-markbox';
+      markbox.setAttribute('data-testid', 'pd-markbox');
+    }
     markbox.setAttribute('data-number', String(annotation.number));
     markbox.style.display = 'none';
     this.root.appendChild(markbox);
@@ -278,10 +309,11 @@ export class Overlay {
 
     const entry: MarkEntry = {
       annotation,
-      target: this.resolveTarget(annotation.selector),
+      target: isRegion ? null : this.resolveTarget(annotation.selector),
       markbox,
       pin,
       resizeObserver: null,
+      isRegion,
     };
 
     pin.addEventListener('click', (ev) => {
@@ -294,7 +326,10 @@ export class Overlay {
       this.hooks.onPinContextMenu?.(entry.annotation, pin, ev);
     });
 
-    this.observeTarget(entry);
+    // 区域标注不需要 ResizeObserver
+    if (!isRegion) {
+      this.observeTarget(entry);
+    }
     return entry;
   }
 
@@ -329,7 +364,29 @@ export class Overlay {
 
   private refresh(): void {
     for (const entry of this.entries.values()) {
-      // 目标元素消失 → 尝试重新解析（页面重渲染后可能复原）
+      if (entry.isRegion) {
+        // 区域标注：按 docRect - scroll 重定位，始终可见
+        const regionData = entry.annotation.region;
+        if (!regionData) continue;
+        const { docRect } = regionData;
+        const vpX = docRect.x - window.scrollX;
+        const vpY = docRect.y - window.scrollY;
+        Object.assign(entry.markbox.style, {
+          display: 'block',
+          left: `${vpX}px`,
+          top: `${vpY}px`,
+          width: `${docRect.w}px`,
+          height: `${docRect.h}px`,
+        });
+        Object.assign(entry.pin.style, {
+          display: 'flex',
+          left: `${vpX - PIN_OFFSET}px`,
+          top: `${vpY - PIN_OFFSET}px`,
+        });
+        continue;
+      }
+
+      // 元素标注：目标元素消失 → 尝试重新解析（页面重渲染后可能复原）
       if (!entry.target || !entry.target.isConnected) {
         entry.target = this.resolveTarget(entry.annotation.selector);
         this.observeTarget(entry);

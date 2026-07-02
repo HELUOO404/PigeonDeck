@@ -17,6 +17,7 @@ import { History } from '../state/history';
 import { restoreSession, bindSessionPersistence } from '../state/session';
 import { loadSettings, Settings } from '../state/settings';
 import { DirectEditManager } from './direct-edit';
+import { RegionSelectManager } from './region-select';
 
 // 防重复注入标记
 const HOST_ID = 'pd-host';
@@ -116,6 +117,17 @@ function inject(settings: Settings): void {
     settings,
     toast,
     panel: panelManager,
+  });
+
+  // 阶段 5：区域框选（长按 ≥300ms → 拖拽框选 → 区域批注面板）
+  new RegionSelectManager({
+    controller,
+    store,
+    history,
+    overlayLayer,
+    panelLayer,
+    panel: panelManager,
+    settings,
   });
 
   // 恢复后：未能定位的标注数据保留、UI 跳过，轻提示
