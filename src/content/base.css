@@ -370,7 +370,12 @@
   overflow: hidden;
   transition: height var(--t-mid) var(--ease);
 }
-.pbody { padding: 12px 12px 11px; }
+.pbody {
+  padding: 12px 12px 11px;
+  /* 修改栏/高级样式加入后内容可能超视口：主体滚动，底栏常驻 */
+  max-height: calc(100vh - 120px);
+  overflow-y: auto;
+}
 
 /* 底栏（信息 + 删除/保存） */
 .pfoot {
@@ -536,3 +541,569 @@
 /* panel 层的浮层可交互 */
 [data-layer="panel"] > * { pointer-events: auto; }
 /* overlay 层默认穿透，仅位号圆可交互（.pd-pin 单独恢复） */
+
+/* ============================================================
+   阶段 3b：修改栏 / 高级样式 / 属性控件配方
+   来源：preview/pigeonlib.css（逐值照搬）+ parts 22/23（调试/调色盘局部样式）
+   ============================================================ */
+
+/* 输入框（药丸形） */
+.pd-input {
+  width: 100%;
+  box-sizing: border-box;
+  font: 13px var(--font-ui);
+  color: var(--ctx2);
+  background: var(--cbg);
+  border: 1px solid var(--cbd);
+  padding: 6px 13px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  border-radius: 999px;
+}
+.pd-input:focus {
+  border-color: var(--c1-edge);
+  box-shadow: 0 0 0 3px var(--c1-soft);
+}
+
+/* 下拉触发钮：去原生箭头，右侧小圆球 chevron */
+.pd-select {
+  width: 100%;
+  box-sizing: border-box;
+  font: 13px var(--font-ui);
+  color: var(--ctx2);
+  background: var(--cbg);
+  border: 1px solid var(--cbd);
+  padding: 6px 13px;
+  outline: none;
+  transition: border-color var(--t-fast) var(--ease), box-shadow var(--t-fast) var(--ease);
+  border-radius: 999px;
+}
+.pd-sel { position: relative; display: inline-block; width: 100%; vertical-align: middle; }
+.pd-sel .pd-select {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 100%;
+  padding-right: 34px;
+  display: flex;
+  align-items: center;
+  text-align: left;
+  cursor: pointer;
+}
+.pd-sel .pd-select .v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-sel-arrow {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--chv);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ctx2);
+  pointer-events: none;
+}
+.pd-sel-arrow svg { width: 13px; height: 13px; }
+
+/* 统一自制下拉浮层（智能识别栏 + 全量列表，≥7 行可见后滚动） */
+.pd-dd {
+  position: absolute;
+  min-width: 190px;
+  padding: 6px;
+  border-radius: var(--r-card);
+  background: var(--csf);
+  border: 1px solid var(--cbd);
+  box-shadow: var(--sh-up);
+  box-sizing: border-box;
+}
+.pd-dd-h {
+  font: 600 10px var(--font-ui);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--ctx2);
+  margin: 3px 7px 4px;
+}
+.pd-dd-list { display: flex; flex-direction: column; gap: 1px; }
+.pd-dd-item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 7px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  font: 13px var(--font-ui);
+  color: var(--ctx);
+}
+.pd-dd-item:hover { background: var(--chv); }
+.pd-dd-item.on { background: var(--c1-soft); }
+.pd-dd-item .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pd-dd-item .smart {
+  flex: none;
+  font: 600 8px var(--font-ui);
+  color: var(--c1);
+  background: var(--c1-soft);
+  border: 1px solid var(--c1-edge);
+  border-radius: 999px;
+  padding: 1px 6px;
+  letter-spacing: .3px;
+}
+.pd-dd-item .chk { flex: none; color: var(--c1); display: none; }
+.pd-dd-item.on .chk { display: flex; }
+.pd-dd-item.on .chk svg { width: 15px; height: 15px; }
+.pd-dd-sep { height: 1px; margin: 7px 6px; background: var(--cbd); }
+.pd-dd-scroll { max-height: 250px; overflow: auto; }   /* ≈7 行可见后滚动 */
+
+/* 数值控件：大胶囊 + 右侧嵌套小圆胶囊 +/− */
+.pd-num {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  padding-right: 3px;
+  border: 1px solid var(--cbd);
+  border-radius: 999px;
+  background: var(--cbg);
+  overflow: hidden;
+}
+.pd-num input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: 13px var(--font-ui);
+  color: var(--ctx2);
+  padding: 6px 2px 6px 11px;
+}
+.pd-num .unit { flex: none; display: flex; align-items: center; padding: 0 4px 0 1px; color: var(--ctx2); font-size: 12px; }
+.pd-num .step { flex: none; display: flex; gap: 0; padding: 2px; border-radius: 999px; background: var(--chv); }
+.pd-num .step button {
+  border: 0;
+  background: transparent;
+  color: var(--ctx2);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  min-width: 20px;
+  height: 19px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-fast) var(--ease);
+}
+.pd-num .step button:first-child { margin-right: -1px; }
+.pd-num .step button svg { width: 13px; height: 13px; }
+.pd-num .step button:hover { background: var(--csf); }
+
+/* 分段控件（药丸） */
+.pd-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border-radius: 999px;
+  background: var(--cbg);
+  border: 1px solid var(--cbd);
+}
+.pd-seg button {
+  border: 0;
+  background: transparent;
+  color: var(--ctx2);
+  cursor: pointer;
+  font: 500 12px var(--font-ui);
+  padding: 5px 12px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-fast) var(--ease), color var(--t-fast) var(--ease);
+}
+.pd-seg button svg { width: 15px; height: 15px; }
+.pd-seg.icons button { padding: 5px 11px; }
+.pd-seg button.on { background: var(--csf); color: var(--ctx); box-shadow: var(--sh); }
+.pd-seg.accent button.on { color: var(--c1); }
+/* 文字装饰分段（B/I/U/S 字形） */
+.pd-seg.deco button { font: 700 12px var(--font-ui); min-width: 26px; }
+.pd-seg.deco .d-i { font-style: italic; }
+.pd-seg.deco .d-u { text-decoration: underline; }
+.pd-seg.deco .d-s { text-decoration: line-through; }
+
+/* 统一颜色控件（一行三件）：色块圆 → 色值药丸 → 取色器 */
+.pd-color { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pd-color .sw {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--cbd);
+  padding: 0;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+  /* 透明棋盘格底，alpha 颜色透出 */
+  background-color: #fff;
+  background-image:
+    linear-gradient(45deg,#c8c8c8 25%,transparent 25%,transparent 75%,#c8c8c8 75%),
+    linear-gradient(45deg,#c8c8c8 25%,transparent 25%,transparent 75%,#c8c8c8 75%);
+  background-size: 10px 10px;
+  background-position: 0 0, 5px 5px;
+}
+.pd-color .sw .fill { position: absolute; inset: 0; }
+.pd-color .sw::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,.14);
+  pointer-events: none;
+}
+.pd-color .val {
+  flex: 1;
+  min-width: 0;
+  border: 1px solid var(--cbd);
+  border-radius: 999px;
+  background: var(--cbg);
+  outline: none;
+  font: 13px var(--font-ui);
+  color: var(--ctx2);
+  padding: 6px 14px;
+  font-variant-numeric: tabular-nums;
+}
+.pd-color .eye {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: transparent;
+  color: var(--ctx2);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color var(--t-fast) var(--ease);
+}
+.pd-color .eye svg { width: 17px; height: 17px; }
+.pd-color .eye:hover { color: var(--c1); }
+
+/* 窄竖向分类导航（高级样式）：圆形选中 + 变更角标 */
+.pd-nav { display: flex; flex-direction: column; gap: 2px; width: 46px; flex: none; }
+.pd-nav button {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 5px 2px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ctx2);
+  cursor: pointer;
+  font: 500 10px var(--font-ui);
+}
+.pd-nav button .ic {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--t-fast) var(--ease);
+}
+.pd-nav button svg { width: 16px; height: 16px; }
+.pd-nav button:hover .ic { background: var(--chv); }
+.pd-nav button.on { color: var(--c1); }
+.pd-nav button.on .ic { background: var(--c1-soft); box-shadow: 0 0 0 1px var(--c1-edge) inset; }
+/* 变更角标：左竖条 + 计数点 */
+.pd-nav button.chg::before {
+  content: "";
+  position: absolute;
+  left: -2px;
+  top: 8px;
+  width: 2px;
+  height: 14px;
+  border-radius: 999px;
+  background: var(--c1);
+}
+.pd-nav button .cnt {
+  position: absolute;
+  top: 2px;
+  right: 3px;
+  min-width: 13px;
+  height: 13px;
+  padding: 0 3px;
+  box-sizing: border-box;
+  border-radius: 999px;
+  background: var(--c1);
+  color: #fff;
+  font: 600 8px/13px var(--font-ui);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+/* 调试导航底部翻译开关 */
+.pd-nav .navsep { height: 1px; width: 22px; margin: 6px auto 5px; background: var(--cbd); }
+.pd-nav .tr svg { width: 16px; height: 16px; }
+.pd-nav .tr.on { color: var(--c1); }
+.pd-nav .tr.on .ic { background: var(--c1-soft); box-shadow: 0 0 0 1px var(--c1-edge) inset; }
+
+/* 行内变更说明（旧→新） */
+.pd-diff {
+  font: 500 11px var(--font-ui);
+  color: var(--ctx2);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pd-diff i { font-style: normal; margin: 0 3px; opacity: .65; }
+.pd-diff b { color: var(--c1); font-weight: 600; }
+
+/* 滑杆 — 药丸轨 + 金色拇指 */
+.pd-range {
+  position: relative;
+  height: 6px;
+  border-radius: 999px;
+  border: 1px solid var(--cbd);
+  background: linear-gradient(90deg,var(--c1-soft),var(--c1));
+  cursor: pointer;
+}
+.pd-range .knob {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid var(--c1);
+  transform: translate(-50%,-50%);
+}
+
+/* 通用滚动条（面板内） */
+.pd-scroll::-webkit-scrollbar { width: 6px; }
+.pd-scroll::-webkit-scrollbar-thumb { background: var(--cbd); border-radius: 999px; }
+
+/* 修改栏 / 属性块（修改栏与高级样式共用，双入口单源） */
+.modbox { border: 1px solid var(--cbd); border-radius: var(--r-card); background: var(--cbg); padding: 11px; margin-top: 11px; }
+.modbox-h {
+  font: 600 10.5px var(--font-ui);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--ctx2);
+  margin-bottom: 9px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.modbox-h::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--c1); }
+.prop + .prop { margin-top: 11px; }
+.prop-h { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin-bottom: 7px; }
+.prop-h .t { font: 600 12px var(--font-ui); color: var(--ctx); display: flex; align-items: center; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.grid2 > * { min-width: 0; }
+/* 属性控件包裹 */
+.prop .ctl { min-width: 0; }
+/* grid2 内的属性原件不叠加竖向间距 */
+.grid2 .prop + .prop { margin-top: 0; }
+
+/* 高级样式底框（导航 + 控件） */
+.advbox {
+  border: 1px solid var(--cbd);
+  border-radius: var(--r-card);
+  background: var(--cbg);
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+}
+.adv-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font: 500 12px var(--font-ui);
+  color: var(--ctx);
+  padding: 0 1px 8px;
+  margin-top: 11px;
+  cursor: pointer;
+}
+.adv {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 11px;
+  padding: 10px 11px;
+  border: 1px solid var(--cbd);
+  border-radius: var(--r-ctl);
+  background: var(--cbg);
+  cursor: pointer;
+  font: 500 12px var(--font-ui);
+  color: var(--ctx);
+}
+.adv .meta { font-size: 11px; color: var(--ctx2); }
+.adv .r { display: flex; align-items: center; gap: 8px; }
+.adv svg, .adv-head svg { width: 15px; height: 15px; }
+
+/* 内容列（高级样式右侧） */
+.scon { flex: 1; min-width: 0; }
+
+/* 自动适配说明条（陌生元素） */
+.autonote {
+  display: flex;
+  gap: 7px;
+  align-items: flex-start;
+  padding: 7px 9px;
+  margin-bottom: 11px;
+  border-radius: var(--r-ctl);
+  background: var(--c1-soft);
+  border: 1px solid var(--c1-edge);
+  font: 11.5px/1.45 var(--font-ui);
+  color: var(--ctx);
+}
+.autonote svg { width: 14px; height: 14px; color: var(--c1); flex: none; margin-top: 1px; }
+.auto {
+  font: 600 9px var(--font-ui);
+  color: var(--c1);
+  background: var(--c1-soft);
+  border: 1px solid var(--c1-edge);
+  border-radius: 999px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+/* 不透明度/模糊：滑杆 + 数值 */
+.opwrap { display: flex; align-items: center; gap: 10px; }
+.opwrap .pd-range { flex: 1; }
+.opwrap .opval {
+  min-width: 38px;
+  text-align: right;
+  font: 12px var(--font-ui);
+  color: var(--ctx2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ============================================================
+   调色盘（展开浮层）— 来源：preview/parts/23-palette.html
+   卡片宽度 = 7 个预制色块的总宽：content 210 + padding 13×2 = 236
+   ============================================================ */
+.pop { position: absolute; width: 236px; padding: 13px; box-sizing: content-box; }
+.pop-h {
+  font: 600 12px var(--font-ui);
+  color: var(--ctx);
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.pop-h .pd-diff { font-weight: 500; }
+/* 取色器面板：饱和度方块（overflow 裁角）+ 色相条；背景渐变由 JS 按当前色相内联 */
+.sat {
+  height: 96px;
+  border-radius: var(--r-ctl);
+  border: 1px solid var(--cbd);
+  overflow: hidden;
+  position: relative;
+  cursor: crosshair;
+}
+.sat .dot {
+  position: absolute;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.25);
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+}
+.hue {
+  height: 10px;
+  border-radius: 999px;
+  margin-top: 10px;
+  position: relative;
+  background: linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00);
+  cursor: pointer;
+}
+.hue .k {
+  position: absolute;
+  top: 50%;
+  width: 13px;
+  height: 13px;
+  border-radius: 50%;
+  background: #fff;
+  border: 1.5px solid var(--ctx);
+  transform: translate(-50%,-50%);
+  pointer-events: none;
+}
+/* HEX 行 */
+.hexrow { display: flex; align-items: center; gap: 8px; margin-top: 11px; }
+.hexrow .chip { width: 28px; height: 28px; border-radius: 50%; border: 1px solid rgba(0,0,0,.12); flex: none; }
+.hexrow .pd-input { flex: 1; }
+/* RGB 三通道微调 */
+.rgb { display: flex; gap: 6px; margin-top: 8px; }
+.rgb .f {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--cbd);
+  border-radius: 999px;
+  background: var(--cbg);
+  padding: 5px 10px;
+}
+.rgb .f b { font: 600 10px var(--font-ui); color: var(--ctx2); flex: none; }
+.rgb .f input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  outline: none;
+  font: 12px var(--font-ui);
+  color: var(--ctx);
+  font-variant-numeric: tabular-nums;
+}
+/* 局部取色推荐：7 色块铺满卡片宽度 */
+.sug { margin-top: 12px; }
+.sug-h {
+  font: 600 10px var(--font-ui);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--ctx2);
+  margin-bottom: 7px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sug-h small { font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--ctx2); opacity: .85; }
+.sug-row { display: flex; gap: 6px; }
+.sug-row .s { flex: 1; aspect-ratio: 1; border-radius: 50%; border: 1px solid rgba(0,0,0,.1); cursor: pointer; }
+.sug-row .s.on { box-shadow: 0 0 0 2px var(--csf), 0 0 0 3.5px var(--c1); }
+/* 透明度 */
+.opa { margin-top: 12px; }
+.opa-h { display: flex; justify-content: space-between; font-size: 11px; color: var(--ctx2); margin-bottom: 7px; }
+
+/* ============================================================
+   调试分类只读 readout — 来源：preview/parts/22-adv-debug.html
+   （翻译态与英文态逐行对齐：同行数 + 同 max-height，只换标签不改高度）
+   ============================================================ */
+.dom-h {
+  font: 600 10px var(--font-ui);
+  letter-spacing: .5px;
+  text-transform: uppercase;
+  color: var(--ctx2);
+  margin: 0 0 6px;
+}
+.kv { display: flex; justify-content: space-between; gap: 10px; font: 11.5px var(--font-ui); padding: 3px 0; }
+.kv .k { color: var(--ctx2); }
+.kv .v { color: var(--ctx); font-variant-numeric: tabular-nums; text-align: right; word-break: break-all; }
+.kv .v code { font: 11px ui-monospace,Consolas,monospace; color: var(--c1); }
+.csgrp { margin-top: 11px; }
+.cslist { max-height: 150px; overflow: auto; border-top: 1px solid var(--cbd); padding-top: 6px; }
+.csrow { display: flex; justify-content: space-between; gap: 10px; font: 11px ui-monospace,Consolas,monospace; padding: 3px 0; }
+.csrow .p { color: var(--ctx2); }
+.csrow .val { color: var(--ctx); }
+
+/* 批注卡片下半区：调整项行（原值 → 新值，design-system §5.20/§6.2） */
+.acard .mod { display: flex; align-items: center; justify-content: space-between; gap: 10px; font: 12px var(--font-ui); }
+.acard .mod .k { color: var(--ctx2); flex: none; }
+.acard .mod .pd-diff { overflow: hidden; text-overflow: ellipsis; }
+
