@@ -210,6 +210,70 @@ describe('AnnotationStore — restore（撤销删除/重做新增）', () => {
   });
 });
 
+describe('AnnotationStore — 区域标注 kind/region 字段', () => {
+  function regionInput(overrides: Partial<import('./annotations').AnnotationInput> = {}): import('./annotations').AnnotationInput {
+    return {
+      selector: '',
+      elementType: 'other',
+      summary: '特性区',
+      note: '留白偏紧',
+      changes: [],
+      viewportPos: { x: 14, y: 58, w: 160, h: 128 },
+      kind: 'region',
+      region: {
+        docRect: { x: 14, y: 58, w: 160, h: 128 },
+        elements: ['#feature-card'],
+      },
+      ...overrides,
+    };
+  }
+
+  it('区域标注 add 后 kind/region 字段保留', () => {
+    const s = new AnnotationStore();
+    const a = s.add(regionInput());
+    expect(a.kind).toBe('region');
+    expect(a.region?.docRect).toEqual({ x: 14, y: 58, w: 160, h: 128 });
+    expect(a.region?.elements).toContain('#feature-card');
+  });
+
+  it('区域标注编号接续元素标注（共用编号系统）', () => {
+    const s = new AnnotationStore();
+    const elem = s.add(input({ selector: '#a' }));
+    const region = s.add(regionInput());
+    expect(elem.number).toBe(1);
+    expect(region.number).toBe(2);
+  });
+
+  it('序列化/反序列化往返保留 kind + region', () => {
+    const s = new AnnotationStore();
+    s.add(input({ selector: '#a' }));
+    s.add(regionInput());
+    const state = s.toPageState();
+
+    const restored = new AnnotationStore();
+    restored.load(state);
+    const all = restored.getAll();
+    expect(all).toHaveLength(2);
+    const reg = all.find((a) => a.kind === 'region');
+    expect(reg).toBeDefined();
+    expect(reg!.region?.docRect).toEqual({ x: 14, y: 58, w: 160, h: 128 });
+    expect(reg!.region?.elements).toContain('#feature-card');
+    // 元素标注 kind 为 undefined（兼容旧数据）
+    const elem = all.find((a) => a.kind !== 'region');
+    expect(elem?.kind).toBeUndefined();
+  });
+
+  it('缺少 kind 的旧数据仍可正常 add/restore', () => {
+    const s = new AnnotationStore();
+    // 旧数据无 kind 字段
+    const a = s.add(input({ selector: '#old' }));
+    expect(a.kind).toBeUndefined();
+    s.remove(a.id);
+    s.restore(a);
+    expect(s.getById(a.id)).toBeDefined();
+  });
+});
+
 describe('mergeChanges — 同属性合并', () => {
   const change = (prop: string, oldValue: string, newValue: string): StyleChange => ({
     prop,

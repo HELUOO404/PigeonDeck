@@ -188,5 +188,7 @@
   "replace_url_placeholder": { "message": "Paste a URL", "description": "Replace media URL input placeholder" },
   "replace_confirm": { "message": "Replace", "description": "Replace media confirm button" },
   "replace_media_change": { "message": "Media source", "description": "Card change-row label for image/video replacement" },
-  "toast_media_unpersisted": { "message": "Large media replaced in memory only; won't survive a refresh", "description": "Toast when a replaced dataURL exceeds the persistence cap" }
+  "toast_media_unpersisted": { "message": "Large media replaced in memory only; won't survive a refresh", "description": "Toast when a replaced dataURL exceeds the persistence cap" },
+  "region_note_placeholder": { "message": "Describe the region change…", "description": "Region annotation panel textarea placeholder" },
+  "region_label": { "message": "Region", "description": "Region annotation type label in card meta" }
 }

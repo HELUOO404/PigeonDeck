@@ -188,5 +188,7 @@
   "replace_url_placeholder": { "message": "粘贴 URL", "description": "替换媒体 URL 输入占位" },
   "replace_confirm": { "message": "替换", "description": "替换媒体确认按钮" },
   "replace_media_change": { "message": "媒体源", "description": "卡片图片/视频替换调整项标签" },
-  "toast_media_unpersisted": { "message": "大文件仅在内存中替换，刷新后不可恢复", "description": "替换的 dataURL 超过持久化上限时的轻提示" }
+  "toast_media_unpersisted": { "message": "大文件仅在内存中替换，刷新后不可恢复", "description": "替换的 dataURL 超过持久化上限时的轻提示" },
+  "region_note_placeholder": { "message": "描述区域修改意见…", "description": "区域批注面板输入框占位文字" },
+  "region_label": { "message": "区域", "description": "区域批注类型标签（卡片底栏 meta）" }
 }

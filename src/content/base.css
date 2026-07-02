@@ -1210,6 +1210,15 @@
   border-radius: 4px;
 }
 
+/* 区域批注框（来源：preview/pigeonlib.css 第 358 行） */
+.pd-region {
+  position: absolute;
+  border: 1.5px solid var(--c1);
+  background: var(--c1-soft);
+  border-radius: 6px;
+  pointer-events: none;
+}
+
 /* ============================================================
    阶段 4b：图片/视频替换弹层
    视觉来源：preview/parts/25-replace-media.html 逐值照搬
@@ -1235,4 +1244,40 @@
 .rep .urlrow { display: flex; gap: 6px; }
 .rep .urlrow .pd-input { flex: 1; }
 
-
+/* ============================================================
+   阶段 5：小型区域批注面板（来源：preview/parts/08-region.html <style> 逐值照搬）
+   ============================================================ */
+.rpanel {
+  position: absolute;
+  width: 158px;
+  padding: 10px;
+}
+.rpanel .rin {
+  width: 100%;
+  box-sizing: border-box;
+  font: 12px var(--font-ui);
+  color: var(--ctx);
+  background: var(--cbg);
+  border: 1px solid var(--cbd);
+  border-radius: var(--r-ctl);
+  padding: 8px 10px;
+  line-height: 1.5;
+  resize: none;
+  outline: none;
+  field-sizing: content;
+  min-height: 38px;
+  overflow: hidden;
+}
+.rpanel .rin:focus {
+  border-color: var(--c1-edge);
+  box-shadow: 0 0 0 3px var(--c1-soft);
+}
+.rpanel .rrow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 8px;
+}
+.rpanel .pd-btn { min-height: 26px; padding: 0 11px; font-size: 11px; }
+.rpanel .pd-iconbtn { width: 26px; height: 26px; }

@@ -46,6 +46,14 @@ export function mergeChanges(prev: StyleChange[], next: StyleChange[]): StyleCha
   return [...map.values()].filter((c) => c.oldValue !== c.newValue);
 }
 
+/** 区域标注专用字段（kind==='region' 时存在） */
+export interface RegionData {
+  /** 相对文档的矩形（视口矩形 + 滚动偏移），用于跨滚动位置复现 */
+  docRect: ViewportPos;
+  /** 框内可见元素 CSS 选择器列表，上限 30 */
+  elements: string[];
+}
+
 /** 一条标注记录 */
 export interface Annotation {
   id: string;
@@ -57,6 +65,10 @@ export interface Annotation {
   changes: StyleChange[];
   createdAt: number;
   viewportPos: ViewportPos;
+  /** 标注类型：'element'（默认，兼容旧数据）或 'region'（区域框选） */
+  kind?: 'element' | 'region';
+  /** 区域数据（kind==='region' 时有效） */
+  region?: RegionData;
 }
 
 /** 新建标注的输入（id/number/createdAt 由 Store 分配） */
