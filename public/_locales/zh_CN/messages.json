@@ -165,5 +165,17 @@
   "palette_suggest_hint": { "message": "取自元素及祖先链", "description": "调色盘推荐色提示" },
   "palette_opacity": { "message": "透明度", "description": "调色盘透明度滑杆标签" },
   "palette_eyedropper": { "message": "取色", "description": "取色器按钮提示" },
-  "palette_open": { "message": "点击展开调色盘", "description": "色块按钮提示" }
+  "palette_open": { "message": "点击展开调色盘", "description": "色块按钮提示" },
+  "rt_font": { "message": "字体", "description": "富文本浮条字体下拉提示" },
+  "rt_size": { "message": "字号", "description": "富文本浮条字号下拉提示" },
+  "rt_color": { "message": "字色", "description": "富文本浮条字色按钮提示" },
+  "rt_highlight": { "message": "高亮", "description": "富文本浮条高亮按钮提示" },
+  "rt_bold": { "message": "加粗", "description": "富文本浮条加粗按钮提示" },
+  "rt_italic": { "message": "倾斜", "description": "富文本浮条倾斜按钮提示" },
+  "rt_underline": { "message": "下划线", "description": "富文本浮条下划线按钮提示" },
+  "rt_strike": { "message": "删除线", "description": "富文本浮条删除线按钮提示" },
+  "rt_superscript": { "message": "上标", "description": "富文本浮条上标按钮提示" },
+  "rt_subscript": { "message": "下标", "description": "富文本浮条下标按钮提示" },
+  "rt_align": { "message": "对齐", "description": "富文本浮条对齐下拉提示" },
+  "rt_list": { "message": "无序列表", "description": "富文本浮条列表按钮提示" }
 }
