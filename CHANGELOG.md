@@ -11,6 +11,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 11：设置面板（2026-07-03）
+
+- 设置面板（`src/content/settings-panel.ts`，`SettingsManager`）：点工具盘「设置」（mode='settings'）→ 贴工具盘**侧边**弹出大面板（`positionBeside`，避免与工具盘列重叠被 control 层遮挡）；`.pd-surface.spanel` 340px，`.shead`（标题 + 关闭）+ `.sbody`（左 `.pd-nav` 4 分区导航 + 右 `.scon` 滚动内容）；点外部/关闭/切模式/Esc 关闭；照搬 preview parts 13/17/18/19
+- 4 分区设置项（照蓝图 §9 全表 + parts）：
+  - **通用**：界面语言（搜索式选择器）、主题亮/暗（`.pd-seg` 图标段，即时 `setTheme` + 持久）、默认选择粒度（智能组件块/单元素）、重置插件位置
+  - **交互**：长按时长 / 拖拽防误触阈值 / 撤销历史上限（`.pd-num` 数值步进）、标注卡片默认展开 / 元素 hover 标签（`.pd-switch`）、快捷键（V1 只读参考 `Ctrl+Z / Ctrl+⇧+Z / Esc`）
+  - **输出**：导出语言（搜索式全量选择器）、复制图片方式（剪贴板/下载段）、图片元数据水印开关
+  - **帮助**：安装说明页 / 检查更新 / 反馈（V1 占位）+ 关于区（版本号）
+- 设置传播：main.ts 单一 `settings` 对象引用传给所有 Manager；设置面板改动 = 原地改共享对象 + `saveSettings` 持久化 + 调对应 live-apply（`setTheme`/`resolver.setGranularity`/`history.setLimit`/`overlay.updateSettings`）；`region-select` 每次长按读 `settings.longPressMs`、`move` 拖拽读 `settings.dragThreshold` 即时生效
+- 新增设置字段（`src/state/settings.ts`）：`theme`（默认 light）/ `longPressMs`（300）/ `dragThreshold`（0 = 点住即拖，默认不改变移动行为）
+- **搜索式语言选择器**（`src/content/language-picker.ts` + `src/shared/languages.ts`，蓝图 §8.1/§8.2）：两模式浮层——界面语言（选项来自 `AVAILABLE_LANGUAGES.json`）/ 导出语言（钉住组「英文 + 跟随界面」+ 全部语言 BCP47 列表）；实时搜索 `matchLanguages` 纯函数支持模糊/首字母/ISO 代码前缀匹配 + 命中高亮，照搬 parts 29/39
+- 界面语言切换：`setLocale` 持久化 + 重建设置面板即时切换其内文案；工具盘 tooltip 等其余界面刷新后完全生效（V1，toast 诚实提示）
+- 导出语言加宽：`settings.exportLang` → `string`（'auto' 或任意 BCP47 code）；`renderTaskList` lang 参数放宽为 string，仅 en/zh_CN 有模板、其余经 `normalizeLang` 回退英文；curated BCP47 子集约 42 种（社区可扩充）
+- i18n：设置面板 + 语言选择器全部文案，中英双语
+- 单测：`settings.test.ts`（默认值/合并/`clampNumber`）+ `languages.test.ts` 11 条（模糊/ISO/首字母/空 query/高亮 range）
+- E2E：`tests/e2e/settings.spec.ts` 10 用例（面板开关、4 分区切换、主题暗色、hover 开关持久、历史步进、关闭三途径、语言选择器出现+搜索筛选+选择切换、导出语言钉住组）；顺带加固既有 move 句柄缩放/粒度用例的负载下 flaky（stableHandleCenter + 分段拖拽 + 轮询断言）
+- 已知简化（V1）：快捷键只读不可重绑（V2）；界面语言仅 en/zh_CN 有翻译；界面语言切换非全局实时重渲
+
 ### Coding — 阶段 10：清空确认（2026-07-03）
 
 - 清空确认弹层（`src/content/clear.ts`，`ClearManager`）：点工具盘「清空」→ 贴清空按钮**侧边**弹出小确认层（照搬 preview part 14 `.pd-surface.confirm`：说明 + 取消 ghost / 确认清空 danger）；再点清空 = 收起；无标注内容时仅轻提示不弹层；点外部/取消/确认后关闭并移除清空按钮危险态
@@ -235,7 +253,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | ~~8~~ | ~~复制文本：Codex/AI 任务清单生成 + 去重合并~~ ✅ |
 | 9 | ~~复制图片：单页长图 + 批注叠加~~ ✅ |
 | 10 | ~~清空确认：贴工具盘确认弹层~~ ✅ |
-| 11 | 设置面板：4 分区 + 贴工具盘 |
+| 11 | ~~设置面板：4 分区 + 贴工具盘~~ ✅ |
 | 12 | 安装说明页：首次自动打开 + 设置可重看 |
 | 13 | Popup 与后台：Service Worker + 右键菜单 + file:// + PDF 提示 |
 | 14 | i18n 完整化：中英双语全覆盖 |
