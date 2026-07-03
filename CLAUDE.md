@@ -4,7 +4,11 @@
 
 ## 仓库当前阶段
 
-**🎉 V1 全 15 阶段代码闭环完成，全部合并 main。** 设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施完毕。**剩余为用户手动冒烟（[docs/manual-smoke-checklist.md](docs/manual-smoke-checklist.md)，71 项）+ 打包上架。** 各阶段要点：
+**🎉 V1 全 15 阶段代码闭环完成，全部合并 main。** 设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施完毕。**剩余为用户手动冒烟（[docs/manual-smoke-checklist.md](docs/manual-smoke-checklist.md)，71 项）+ 打包上架。**
+
+> **2026-07-04：已完成「7.3.1 用户反馈第一轮」修复**（约 50 条真机反馈，拆 6 组顺序实施，9 个提交在本地 main）。用户拍板：批注模式右键拦截系统菜单、移动吸附=真实 DOM 重父嵌入、快捷键完整重绑。终态 vitest 351 / 全量 E2E 96 passed ×2（唯 2 例剪贴板读为已知环境限制）。详见 [CHANGELOG](CHANGELOG.md) Bugfix 段与 [HANDOFF §8](HANDOFF.md)。**待网络恢复 push + bug 文件 2 处未解语义待用户澄清。**
+
+各阶段要点：
 - **阶段 1 工程骨架**：Vite 双配置构建（content IIFE + background ES）、Shadow DOM 四层宿主、pigeonlib 设计令牌、i18n 框架、logger。
 - **阶段 2 工具盘与悬浮球**：模式控制器状态机、42px 悬浮球、7 按钮工具盘、tooltip、长按拖拽持久化、E2E 测试基建。
 - **阶段 3 批注模式**：3a 批注核心 + 3b 修改栏与高级样式（fields.ts 双入口单源、自制下拉/调色盘、样式修改管线→撤销历史、卡片调整项）。
