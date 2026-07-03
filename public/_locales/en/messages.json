@@ -246,6 +246,8 @@
   "set_drag_threshold": { "message": "Drag safety threshold", "description": "Settings: move drag anti-misfire threshold row label" },
   "set_history_limit": { "message": "Undo history limit", "description": "Settings: undo history limit row label" },
   "set_card_expand": { "message": "Expand cards by default", "description": "Settings: annotation card default expanded row label" },
+  "set_show_modbar": { "message": "Show modify bar", "description": "Settings: show the annotation panel modify-bar card row label" },
+  "set_show_modbar_sub": { "message": "Keeps note + advanced styles when off", "description": "Settings: show modify bar subtitle" },
   "set_hover_label": { "message": "Element hover label", "description": "Settings: element hover label row label" },
   "set_shortcuts": { "message": "Shortcuts", "description": "Settings: keyboard shortcuts row label" },
   "set_shortcuts_sub": { "message": "Active while expanded", "description": "Settings: shortcuts subtitle" },

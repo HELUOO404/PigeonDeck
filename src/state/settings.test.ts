@@ -21,11 +21,18 @@ describe('DEFAULT_SETTINGS — 阶段 11 新字段', () => {
   it('保留既有字段默认值不变', () => {
     expect(DEFAULT_SETTINGS.hoverLabel).toBe(true);
     expect(DEFAULT_SETTINGS.cardDefaultExpanded).toBe(false);
-    expect(DEFAULT_SETTINGS.defaultGranularity).toBe('smart');
     expect(DEFAULT_SETTINGS.historyLimit).toBe(50);
     expect(DEFAULT_SETTINGS.exportLang).toBe('en');
     expect(DEFAULT_SETTINGS.imageMethod).toBe('clipboard');
     expect(DEFAULT_SETTINGS.watermark).toBe(false);
+  });
+
+  it('defaultGranularity 默认 element（逻辑12）', () => {
+    expect(DEFAULT_SETTINGS.defaultGranularity).toBe('element');
+  });
+
+  it('showModbar 默认开启（建议7）', () => {
+    expect(DEFAULT_SETTINGS.showModbar).toBe(true);
   });
 
   it('部分存储值与默认值合并：缺失字段回退默认（loadSettings 语义）', () => {

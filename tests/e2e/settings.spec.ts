@@ -330,3 +330,52 @@ test('⑩ 点导出语言 → picker 含「常用」钉住组（英文/跟随）
 
   await page.close();
 });
+
+// ============================================================
+// W6a：默认粒度 element + 隐藏修改栏开关
+// ============================================================
+
+test('⑪ 默认选择粒度控件反映 element（逻辑12）', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openSettings(page);
+
+  // 通用分区默认显示；element 为首选项且处选中态，smart 为次选未选中
+  await waitShadowVisible(page, '[data-testid="pd-set-gran-element"]');
+  expect(await shadowSwitchOn(page, 'pd-set-gran-element')).toBe(true);
+  expect(await shadowSwitchOn(page, 'pd-set-gran-smart')).toBe(false);
+
+  await page.close();
+});
+
+test('⑫ 关「显示修改栏」→ 批注面板无修改栏、仅留说明（建议7）', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openSettings(page);
+  await clickShadowEl(page, 'pd-set-nav-interaction');
+  await waitShadowVisible(page, '[data-testid="pd-set-show-modbar"]');
+
+  // 默认开启 → 关闭
+  expect(await shadowSwitchOn(page, 'pd-set-show-modbar')).toBe(true);
+  await clickShadowEl(page, 'pd-set-show-modbar');
+  await expect.poll(() => shadowSwitchOn(page, 'pd-set-show-modbar'), { timeout: 5000 }).toBe(false);
+
+  // 关设置回批注模式
+  await clickShadowEl(page, 'pd-settings-close');
+  await waitShadowGone(page, '[data-testid="pd-settings"]');
+
+  // 单击页面按钮开批注面板（button 类型即时打开，不走延迟）
+  const btnRect = await page.evaluate(() => {
+    const el = document.getElementById('btn-primary')!;
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  });
+  await page.mouse.click(btnRect.x, btnRect.y);
+  await waitShadowVisible(page, '[data-testid="pd-panel"]');
+
+  // 修改栏卡片缺席，说明文本框仍在
+  expect(await shadowExists(page, '[data-testid="pd-modbox"]')).toBe(false);
+  expect(await shadowExists(page, '[data-testid="pd-panel-note"]')).toBe(true);
+
+  await page.close();
+});

@@ -483,9 +483,13 @@ export class PanelManager {
       this.session = new FieldsSession(target);
       this.panelCommitted = false;
       const ctx: ControlContext = { popoverRoot: this.root };
-      const modbox = this.buildModbox(target, elementType, ctx);
-      body.appendChild(modbox);
-      // 高级样式展开时隐藏普通修改栏（逻辑2，贴 preview part 12 的展开布局），收起恢复
+      // 建议7：修改栏卡片可隐藏（settings.showModbar=false）→ 仅保留说明 + 高级样式
+      const modbox = this.settings.showModbar
+        ? this.buildModbox(target, elementType, ctx)
+        : undefined;
+      if (modbox) body.appendChild(modbox);
+      // 高级样式展开时隐藏普通修改栏（逻辑2，贴 preview part 12 的展开布局），收起恢复；
+      // modbox 缺省时 buildAdvSlot 内部对其存在性做守卫
       body.appendChild(this.buildAdvSlot(elementType, ctx, modbox));
     }
     panel.appendChild(body);

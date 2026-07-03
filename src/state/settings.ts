@@ -9,10 +9,9 @@ export interface Settings {
   /** 标注卡片默认展开（默认关闭） */
   cardDefaultExpanded: boolean;
   /**
-   * 移动/批注模式默认选择粒度：
-   * 'smart'   = 智能组件块（resolveComponentBlock 启发式爬升）
-   * 'element' = 命中元素本身（不爬升）
-   * 阶段 11 再做设置 UI，本阶段只加字段 + 消费。
+   * 移动/批注模式默认选择粒度（默认 'element'）：
+   * 'element' = 命中元素本身（不爬升，默认）
+   * 'smart'   = 智能组件块（resolveComponentBlock 启发式爬升，可选）
    */
   defaultGranularity: 'smart' | 'element';
   /**
@@ -52,12 +51,17 @@ export interface Settings {
    * 位移。默认 0 = 点住即拖（当前行为）。
    */
   dragThreshold: number;
+  /**
+   * 批注面板显示「修改栏 · 文本元素」卡片（建议7）。默认开启。
+   * 关闭后面板仅保留说明文本框 + 高级样式折叠区 + 底栏。
+   */
+  showModbar: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   hoverLabel: true,
   cardDefaultExpanded: false,
-  defaultGranularity: 'smart',
+  defaultGranularity: 'element',
   historyLimit: 50,
   exportLang: 'en',
   imageMethod: 'clipboard',
@@ -65,6 +69,7 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'light',
   longPressMs: 300,
   dragThreshold: 0,
+  showModbar: true,
 };
 
 /** 数值设置项夹紧到 [min, max]；非数字回退 fallback（设置面板 pd-num 用） */

@@ -311,8 +311,8 @@ export class SettingsManager {
         null,
         this.segText(
           [
-            { value: 'smart', label: t('set_gran_smart'), testid: 'pd-set-gran-smart' },
             { value: 'element', label: t('set_gran_element'), testid: 'pd-set-gran-element' },
+            { value: 'smart', label: t('set_gran_smart'), testid: 'pd-set-gran-smart' },
           ],
           this.settings.defaultGranularity,
           (v) => {
@@ -382,6 +382,18 @@ export class SettingsManager {
         this.switchControl(this.settings.cardDefaultExpanded, 'pd-set-card-expand', (on) => {
           this.settings.cardDefaultExpanded = on;
           saveSettings({ cardDefaultExpanded: on });
+        })
+      )
+    );
+
+    // 显示修改栏卡片（建议7）：关闭后批注面板仅留说明 + 高级样式
+    root.appendChild(
+      this.srow(
+        t('set_show_modbar'),
+        t('set_show_modbar_sub'),
+        this.switchControl(this.settings.showModbar, 'pd-set-show-modbar', (on) => {
+          this.settings.showModbar = on;
+          saveSettings({ showModbar: on });
         })
       )
     );
