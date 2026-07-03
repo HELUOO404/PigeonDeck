@@ -16,6 +16,7 @@ import { setTheme } from './main';
 import { t, getLocale, setLocale } from './i18n';
 import { openLanguagePicker } from './language-picker';
 import { BCP47_LANGUAGES } from '../shared/languages';
+import { LOGO_SVG } from './logo';
 
 /** 扩展版本号（about 区展示；manifest 为发布号，V1 展示固定 1.0.0） */
 const VERSION = '1.0.0';
@@ -42,9 +43,6 @@ const IC = {
   plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
   minus: '<path d="M5 12h14"/>',
 } as const;
-
-const BALL_SVG =
-  '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.6 15.2Q10 9.2 17 10.1Q12.8 14.2 7.4 16.1Q5.7 16.6 4.6 15.2ZM9 12.6Q12 5.9 18.8 5Q16.4 9.8 12.4 11.7Q10.5 12.7 9 12.6ZM16.7 10L20.4 8.9 17.2 11.4Z"/></svg>';
 
 type Section = 'general' | 'interaction' | 'output' | 'help';
 
@@ -494,7 +492,7 @@ export class SettingsManager {
     about.className = 'about';
     const ball = document.createElement('span');
     ball.className = 'ball';
-    ball.innerHTML = BALL_SVG;
+    ball.innerHTML = LOGO_SVG;
     const info = document.createElement('div');
     const nm = document.createElement('div');
     nm.className = 'nm';

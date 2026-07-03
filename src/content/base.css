@@ -53,6 +53,23 @@
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  transform-origin: center;
+  /* opacity=进入淡入（--t-mid）；transform=hover 缩放（--t-fast） */
+  transition:
+    opacity var(--t-mid) var(--ease),
+    transform var(--t-fast) var(--ease);
+}
+
+/* hover 轻微放大（建议2） */
+.pd-ball:hover {
+  transform: scale(1.12);
+}
+
+/* 收起态出现（含展开→收起、首帧渲染）：淡入 */
+@starting-style {
+  .pd-ball {
+    opacity: 0;
+  }
 }
 
 .pd-ball svg {
@@ -68,7 +85,8 @@
   background: var(--csf);
   border: 1px solid var(--cbd);
   box-shadow: var(--sh-up);
-  display: inline-flex;
+  /* 显隐由 .pd-wrapper.pd-open 驱动：默认隐藏 */
+  display: none;
   flex-direction: column;
   align-items: center;
   gap: 3px;
@@ -77,10 +95,31 @@
   overflow-y: auto;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  /* 展开进入动画：淡入 + 从锚点（球）方向轻微放大 */
+  transform-origin: top center; /* 向下展开（默认）：从顶部＝球位置生长 */
+  transition:
+    opacity var(--t-mid) var(--ease),
+    transform var(--t-mid) var(--ease);
 }
 
 .pd-toolbar::-webkit-scrollbar {
   display: none;
+}
+
+/* 展开态：球隐藏、工具盘显示（display 瞬时切换，可见性由 opacity 动画柔化） */
+.pd-wrapper.pd-open .pd-ball {
+  display: none;
+}
+.pd-wrapper.pd-open .pd-toolbar {
+  display: inline-flex;
+}
+
+/* 工具盘进入动画起始态（@starting-style 提供淡入/缩放的“从”值） */
+@starting-style {
+  .pd-wrapper.pd-open .pd-toolbar {
+    opacity: 0;
+    transform: scale(0.85);
+  }
 }
 
 /* 激活态（move/settings 模式）：外描边 */
@@ -88,12 +127,10 @@
   border-color: var(--c1-edge);
 }
 
-/* 向上展开：translateY 调整使工具盘向上生长 */
+/* 向上展开：column-reverse 让 Logo（首个子元素）落在底部＝球锚点，工具向上叠 */
 .pd-toolbar.open-upward {
-  position: relative;
-  /* 让工具盘底部与球位置对齐 */
-  bottom: 0;
-  transform: translateY(0); /* JS 动态调整不必用 CSS，依靠 wrapper 的 bottom 定位 */
+  flex-direction: column-reverse;
+  transform-origin: bottom center; /* 从底部＝球位置生长 */
 }
 
 /* ---- 工具盘按钮（圆形 38px） ---- */
@@ -112,7 +149,8 @@
   transition:
     background var(--t-fast) var(--ease),
     color var(--t-fast) var(--ease),
-    border-color var(--t-fast) var(--ease);
+    border-color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
   position: relative;
   padding: 0;
   flex-shrink: 0;
@@ -129,6 +167,7 @@
 
 .pd-tbtn:hover {
   background: var(--chv);
+  transform: scale(1.12);
 }
 
 /* Logo 按钮：金底浅羽，42px */
@@ -142,6 +181,7 @@
 .pd-tbtn.brand:hover {
   background: var(--c1);
   filter: brightness(1.05);
+  transform: scale(1.12);
 }
 
 .pd-tbtn.brand svg {
@@ -163,16 +203,12 @@
   cursor: not-allowed;
 }
 
-/* ---- 合并撤销/重做（横向药丸 42×23，左撤销 右重做） ---- */
+/* ---- 合并撤销/重做（左撤销 右重做；建议1：去药丸外壳，仅保留 42×23 布局盒） ---- */
 .pd-undoredo {
   box-sizing: border-box;
   display: flex;
   width: 42px;
   height: 23px;
-  border-radius: 999px;
-  overflow: hidden;
-  border: 1px solid var(--cbd);
-  background: var(--csf);
   flex-shrink: 0;
 }
 
@@ -187,9 +223,10 @@
   justify-content: center;
   cursor: pointer;
   padding: 0;
+  transform-origin: center;
   transition:
-    background var(--t-fast) var(--ease),
-    color var(--t-fast) var(--ease);
+    color var(--t-fast) var(--ease),
+    transform var(--t-fast) var(--ease);
 }
 
 .pd-undoredo button svg {
@@ -198,9 +235,10 @@
   pointer-events: none;
 }
 
+/* hover：无底色填充，仅变色 + 轻微放大（建议1/建议2） */
 .pd-undoredo button:hover:not(:disabled) {
-  background: var(--chv);
   color: var(--c1);
+  transform: scale(1.12);
 }
 
 .pd-undoredo button:disabled {

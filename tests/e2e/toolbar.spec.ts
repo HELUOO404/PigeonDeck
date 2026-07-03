@@ -276,3 +276,77 @@ test('⑥ drag ball near viewport bottom, expanded toolbar stays in bounds', asy
 
   await page.close();
 });
+
+test('⑦ drag direction is not inverted (drag down-left → ball moves down-left)', async () => {
+  const page = await openFixturePage();
+
+  // 先把球拖到屏幕中部，四周留出空间（点住即拖，无需长按）
+  const start = await getShadowElementRect(page, 'pd-ball');
+  const sx = start!.x + start!.width / 2;
+  const sy = start!.y + start!.height / 2;
+  const vw = page.viewportSize()!.width;
+  const vh = page.viewportSize()!.height;
+  const midX = Math.round(vw / 2);
+  const midY = Math.round(vh / 2);
+
+  await page.mouse.move(sx, sy);
+  await page.mouse.down();
+  await page.mouse.move(midX, midY, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const mid = await getShadowElementRect(page, 'pd-ball');
+  const mx = mid!.x + mid!.width / 2;
+  const my = mid!.y + mid!.height / 2;
+
+  // 从中部向「下 + 左」拖：down = 屏幕 y 增大，left = 屏幕 x 减小
+  await page.mouse.move(mx, my);
+  await page.mouse.down();
+  await page.mouse.move(mx - 120, my + 120, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  const end = await getShadowElementRect(page, 'pd-ball');
+  const ex = end!.x + end!.width / 2;
+  const ey = end!.y + end!.height / 2;
+
+  // 关键：拖「下」→ 球向下（ey 变大），而非旧 bug 的向上
+  expect(ey).toBeGreaterThan(my + 40);
+  // 拖「左」→ 球向左（ex 变小）
+  expect(ex).toBeLessThan(mx - 40);
+
+  await page.close();
+});
+
+test('⑧ click-to-drag needs no long-press; a real drag does not toggle expand', async () => {
+  const page = await openFixturePage();
+
+  const before = await getShadowElementRect(page, 'pd-ball');
+  const cx = before!.x + before!.width / 2;
+  const cy = before!.y + before!.height / 2;
+
+  // 立即拖拽（不做任何 hold / 长按）：down → 直接分段 move → up
+  await page.mouse.move(cx, cy);
+  await page.mouse.down();
+  await page.mouse.move(cx - 90, cy - 60, { steps: 20 });
+  await page.mouse.up();
+  await page.waitForTimeout(150);
+
+  // 位置已改变（无需 300ms 长按即可拖动）
+  const after = await getShadowElementRect(page, 'pd-ball');
+  const moved =
+    Math.abs((after!.x + after!.width / 2) - cx) > 40 ||
+    Math.abs((after!.y + after!.height / 2) - cy) > 40;
+  expect(moved).toBe(true);
+
+  // 真实拖拽不应触发展开：工具盘仍隐藏、球仍可见
+  expect(await isShadowElVisible(page, 'pd-toolbar')).toBe(false);
+  expect(await isShadowElVisible(page, 'pd-ball')).toBe(true);
+
+  // 反证：一次普通点击（无位移）仍能展开
+  await clickShadowEl(page, 'pd-ball');
+  await page.waitForTimeout(250);
+  expect(await isShadowElVisible(page, 'pd-toolbar')).toBe(true);
+
+  await page.close();
+});

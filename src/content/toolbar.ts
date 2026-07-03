@@ -7,6 +7,7 @@
 import { Controller } from './controller';
 import { t } from './i18n';
 import { History } from '../state/history';
+import { LOGO_SVG } from './logo';
 
 const POS_KEY = 'pigeondeck.pos';
 
@@ -14,12 +15,15 @@ const POS_KEY = 'pigeondeck.pos';
 const DEFAULT_RIGHT = 16;
 const DEFAULT_BOTTOM = 16;
 
-/** 长按阈值 ms */
-const LONG_PRESS_MS = 300;
+/** 悬浮球尺寸（px，与 base.css .pd-ball 一致），展开方向计算用 */
+const BALL_SIZE = 42;
+
+/** 拖拽启动位移阈值（px）：点住后首次移动超过即进入拖拽（点住即拖，无长按延时） */
+const DRAG_THRESHOLD_PX = 4;
 
 /* ---- SVG 图标（内联，与 preview part 02 完全一致） ---- */
 const ICONS = {
-  logo: `<svg viewBox="0 0 630.367 618.433" fill="none" stroke="currentColor" stroke-width="35" stroke-linecap="round" stroke-linejoin="round"><path d="M78 387.5C152.631 368.891 76.4167 392.232 49.7159 390.136C29.1717 388.523 9.13425 371.072 2.55369 390.136C-12.5464 433.88 43.4887 557.5 61.4994 557.5C97.5603 557.5 95.1332 499.399 184.592 475.119C256.159 455.694 409.626 508.071 456.782 345.043C503.939 182.015 572.94 180.281 582.476 175.078C592.011 169.875 556.99 105.184 472.386 130.853C450.907 137.369 435.465 148.71 424.171 156.868C399.875 174.416 397.5 180 389 185.5C380.5 191 368.5 203 313.753 182.016C259.005 161.031 242.331 146.042 189.5 107C156.829 82.8558 176 96.4999 75.369 10.3161C-25.262 -75.8676 145.757 407.479 184.592 365.855C197.353 352.189 196.253 346.982 199.328 332.903C205.612 304.136 206.358 271.572 217.532 286.943C224.842 296.998 237.881 316.154 248.739 335.504C262.601 360.21 276.478 376.261 284.28 374.527C292.081 372.793 325.888 347.298 325.888 335.504C325.888 331.568 324.906 329.488 317.921 320.623C315.251 317.234 311.705 312.855 307 307C287.143 282.288 243.751 226.465 280 273" transform="matrix(0.996195,-0.0871557,0.0871557,0.996195,0,50.899)"/></svg>`,
+  logo: LOGO_SVG,
   move: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><path d="M2 12h20"/><path d="M12 2v20"/></svg>`,
   copyText: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></svg>`,
   copyImage: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></svg>`,
@@ -85,7 +89,7 @@ export class Toolbar {
 
   // 拖拽状态
   private dragActive = false;
-  private longPressTimer: ReturnType<typeof setTimeout> | null = null;
+  private armed = false;
   private dragStartPointer = { x: 0, y: 0 };
   private dragStartPos: Pos = { right: 0, bottom: 0 };
   private dragMoved = false;
@@ -145,6 +149,8 @@ export class Toolbar {
     const el = this.wrapper;
     el.style.position = 'fixed';
     el.style.right = `${this.pos.right}px`;
+    // 底锚（球始终锚右下）；展开向下时 updateToolbarDirection 会改为顶锚
+    el.style.top = 'auto';
     el.style.bottom = `${this.pos.bottom}px`;
     el.style.zIndex = '0';
     el.style.pointerEvents = 'auto';
@@ -166,11 +172,15 @@ export class Toolbar {
   private syncState(): void {
     const { expanded, mode } = this.controller.getState();
 
-    // 切换球 vs 工具盘可见性
-    this.ball.style.display = expanded ? 'none' : 'flex';
-    this.toolbar.style.display = expanded ? 'inline-flex' : 'none';
+    // 切换球 vs 工具盘：display 由 CSS（.pd-wrapper.pd-open）驱动，
+    // 配合 @starting-style 做淡入/缩放进入动画（收起态瞬时隐藏，保证 E2E 可见性断言稳定）
+    this.wrapper.classList.toggle('pd-open', expanded);
 
-    if (!expanded) return;
+    if (!expanded) {
+      // 收起：恢复底锚（可能上次向下展开切到了顶锚）
+      this.applyPos();
+      return;
+    }
 
     // 激活态按钮
     this.btnMove.classList.toggle('active', mode === 'move');
@@ -183,19 +193,34 @@ export class Toolbar {
     this.updateToolbarDirection();
   }
 
-  /** 检测视口空间，更新工具盘展开方向与 tooltip 方向 */
+  /** 检测视口空间，更新工具盘展开方向（Logo 始终贴球锚点）与 tooltip 方向 */
   private updateToolbarDirection(): void {
-    const tbRect = this.wrapper.getBoundingClientRect();
+    const el = this.wrapper;
     const tbHeight = this.toolbar.scrollHeight || 320; // 预估高度
+    const vh = window.innerHeight;
 
-    const spaceBelow = window.innerHeight - tbRect.bottom;
-    const spaceAbove = tbRect.top;
+    // 球锚点（收起态球的视口纵向范围，以 pos.bottom 换算）
+    const ballTop = vh - this.pos.bottom - BALL_SIZE;
+    const ballBottom = vh - this.pos.bottom;
+    const roomBelow = vh - ballTop; // 从球上沿向下的可用空间
+    const roomAbove = ballBottom; // 从球下沿向上的可用空间
 
-    // 向上展开：下方不够且上方足够
-    const openUpward = spaceBelow < tbHeight && spaceAbove > spaceBelow;
+    // 优先向下展开；下方放不下且上方更宽裕 → 向上
+    const openUpward = roomBelow < tbHeight && roomAbove > roomBelow;
     this.toolbar.classList.toggle('open-upward', openUpward);
 
+    if (openUpward) {
+      // 底锚：工具盘底部对齐球底部（CSS column-reverse 让 Logo 落在底部＝球位置，工具向上叠）
+      el.style.top = 'auto';
+      el.style.bottom = `${this.pos.bottom}px`;
+    } else {
+      // 顶锚：工具盘顶部对齐球顶部（正常 column，Logo 在顶＝球位置，工具向下延伸）
+      el.style.bottom = 'auto';
+      el.style.top = `${Math.max(0, ballTop)}px`;
+    }
+
     // tooltip 方向：靠近右边缘 → tooltip 在左侧
+    const tbRect = el.getBoundingClientRect();
     const nearRight = window.innerWidth - tbRect.right < 160;
     this.toolbar.classList.toggle('tip-left', nearRight);
     this.toolbar.classList.toggle('tip-right', !nearRight);
@@ -227,7 +252,7 @@ export class Toolbar {
     const tb = document.createElement('div');
     tb.className = 'pd-toolbar tip-right';
     tb.setAttribute('data-testid', 'pd-toolbar');
-    tb.style.display = 'none';
+    // 显隐由 CSS（.pd-wrapper.pd-open）驱动，默认 base.css .pd-toolbar { display:none }
 
     // Logo 按钮（顶部，点击收起）
     const btnLogo = this.createTbtn('pd-tbtn brand', ICONS.logo, 'tb_logo');
@@ -333,7 +358,7 @@ export class Toolbar {
     this.btnRedo.classList.toggle('disabled', !canRedo);
   }
 
-  // ---- 拖拽（长按 ≥ 300ms） ----
+  // ---- 拖拽（点住即拖：首次移动超过阈值即启动，无长按延时） ----
 
   private bindDrag(el: HTMLElement): void {
     el.addEventListener('pointerdown', this.onPointerDown);
@@ -342,73 +367,54 @@ export class Toolbar {
   private onPointerDown = (e: PointerEvent): void => {
     if (e.button !== 0) return;
 
-    // el = the element the listener was attached to (ball or logo btn)
-    const el = e.currentTarget as HTMLElement;
-
+    this.armed = true;
+    this.dragActive = false;
     this.dragMoved = false;
     this.dragStartPointer = { x: e.clientX, y: e.clientY };
     this.dragStartPos = { ...this.pos };
 
-    // 取消时清定时器
-    const cancelOnce = (): void => {
-      if (this.longPressTimer) {
-        clearTimeout(this.longPressTimer);
-        this.longPressTimer = null;
-      }
-      el.removeEventListener('pointerup', cancelOnce);
-      el.removeEventListener('pointermove', checkMove);
-    };
-
-    const checkMove = (ev: Event): void => {
-      const pe = ev as PointerEvent;
-      const dx = Math.abs(pe.clientX - this.dragStartPointer.x);
-      const dy = Math.abs(pe.clientY - this.dragStartPointer.y);
-      if (dx > 4 || dy > 4) cancelOnce();
-    };
-
-    this.longPressTimer = setTimeout(() => {
-      // 长按达成 → 进入拖拽。监听挂 window（捕获阶段）：
-      // 不依赖 setPointerCapture（从 setTimeout 内调用时机不可靠），
-      // 光标移出元素/Shadow DOM 也能持续收到事件。
-      el.removeEventListener('pointerup', cancelOnce);
-      el.removeEventListener('pointermove', checkMove);
-      this.dragActive = true;
-      window.addEventListener('pointermove', this.onPointerMove, true);
-      window.addEventListener('pointerup', this.onPointerUp, true);
-    }, LONG_PRESS_MS);
-
-    el.addEventListener('pointerup', cancelOnce, { once: true });
-    el.addEventListener('pointermove', checkMove);
+    // 监听挂 window（捕获阶段）：光标移出元素/Shadow DOM 也能持续收到事件；
+    // 松手/取消无条件解绑（不依赖 setPointerCapture，杜绝松手后仍跟随光标的顽疾）。
+    window.addEventListener('pointermove', this.onPointerMove, true);
+    window.addEventListener('pointerup', this.endDrag, true);
+    window.addEventListener('pointercancel', this.endDrag, true);
   };
 
   private onPointerMove = (e: PointerEvent): void => {
-    if (!this.dragActive) return;
+    if (!this.armed) return;
 
     const dx = e.clientX - this.dragStartPointer.x;
     const dy = e.clientY - this.dragStartPointer.y;
 
-    if (Math.abs(dx) > 2 || Math.abs(dy) > 2) {
+    // 未启动拖拽：等首次移动超过阈值再进入（点住即拖，同时抑制随后的 click）
+    if (!this.dragActive) {
+      if (Math.abs(dx) <= DRAG_THRESHOLD_PX && Math.abs(dy) <= DRAG_THRESHOLD_PX) return;
+      this.dragActive = true;
       this.dragMoved = true;
     }
 
     const rect = this.wrapper.getBoundingClientRect();
+    // 位置以 right/bottom 存储（向左/向上为正方向）：dx 向右为正 → right 减；dy 向下为正 → bottom 减
     const newRight = this.dragStartPos.right - dx;
-    const newBottom = this.dragStartPos.bottom + dy;
+    const newBottom = this.dragStartPos.bottom - dy;
 
     this.pos = clampPos(newRight, newBottom, rect.width, rect.height);
     this.applyPos();
   };
 
-  private onPointerUp = (): void => {
-    if (!this.dragActive) return;
-
-    this.dragActive = false;
+  /** 松手/取消：无条件解绑窗口监听并结束拖拽，移动过则持久化并重算展开方向 */
+  private endDrag = (): void => {
+    this.armed = false;
     window.removeEventListener('pointermove', this.onPointerMove, true);
-    window.removeEventListener('pointerup', this.onPointerUp, true);
+    window.removeEventListener('pointerup', this.endDrag, true);
+    window.removeEventListener('pointercancel', this.endDrag, true);
+
+    if (!this.dragActive) return;
+    this.dragActive = false;
 
     if (this.dragMoved) {
       savePos(this.pos);
-      // 展开后重计方向
+      // 展开后重计方向（拖拽中为底锚，松手回正确方向）
       if (this.controller.getState().expanded) {
         this.updateToolbarDirection();
       }
