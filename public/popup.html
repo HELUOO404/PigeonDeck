@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title data-i18n="popup_title">PigeonDeck</title>
+<style>
+  /* 自包含：从 pigeonlib 逐值照搬的设计令牌 + 控件配方（popup 不能 link 外部 css）。 */
+  :root {
+    --cbg:#f4efe2; --csf:#faf7f0; --ctx:#23262e; --ctx2:#6b6b6b;
+    --c1:#b8842c; --c1-soft:rgba(184,132,44,0.12); --c1-edge:rgba(184,132,44,0.30);
+    --cd:#b23a2e; --cs:#5c8a4a; --cbd:#d9d3c4; --chv:rgba(0,0,0,0.04);
+    --font-ui:system-ui,-apple-system,'Segoe UI',Roboto,'Noto Sans SC',sans-serif;
+    --font-serif:'Fraunces','Noto Serif SC',Georgia,serif;
+    --r-ctl:9px; --r-card:12px;
+    --t-mid:.18s; --ease:cubic-bezier(.4,0,.2,1);
+    --sh-up:0 10px 30px -12px rgba(60,44,16,.3);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin:0; padding:0; }
+  body { width:288px; background:var(--csf); color:var(--ctx);
+    font-family:var(--font-ui); -webkit-font-smoothing:antialiased; }
+
+  .phead { display:flex; align-items:center; gap:11px; padding:14px 15px; border-bottom:1px solid var(--cbd); }
+  .phead .ball { width:30px; height:30px; border-radius:50%; background:var(--c1);
+    display:flex; align-items:center; justify-content:center; flex:none; padding:6px; }
+  .phead .ball img { width:100%; height:100%; display:block; }
+  .pname { font-family:var(--font-serif); font-weight:600; font-size:15px; color:var(--ctx); line-height:1.2; }
+  .psite { font-size:11px; color:var(--ctx2); margin-top:2px; word-break:break-all; }
+
+  .pbd { padding:12px 15px 14px; }
+
+  .stat { display:flex; align-items:center; gap:8px; padding:9px 11px; border-radius:var(--r-ctl);
+    background:rgba(92,138,74,.10); border:1px solid rgba(92,138,74,.3); color:var(--ctx);
+    font-size:12.5px; margin-bottom:6px; }
+  .stat .dot { width:7px; height:7px; border-radius:50%; background:var(--cs); flex:none;
+    box-shadow:0 0 0 3px rgba(92,138,74,.18); }
+  /* 已禁用状态：中性灰 */
+  .stat.off { background:var(--chv); border-color:var(--cbd); color:var(--ctx2); }
+  .stat.off .dot { background:var(--ctx2); box-shadow:0 0 0 3px rgba(0,0,0,.06); }
+  /* 不支持页面：火漆红 */
+  .stat.warn { background:rgba(178,58,46,.07); border-color:rgba(178,58,46,.35); color:var(--ctx); }
+  .stat.warn .dot { background:var(--cd); box-shadow:0 0 0 3px rgba(178,58,46,.16); }
+
+  .pd-srow { display:flex; align-items:center; justify-content:space-between; gap:14px; padding:9px 0; }
+  .pd-srow .k { font-size:13px; color:var(--ctx); }
+
+  .pd-switch { width:38px; height:21px; border-radius:999px; border:0; cursor:pointer;
+    background:var(--cbd); position:relative; transition:background var(--t-mid) var(--ease); padding:0; flex:none; }
+  .pd-switch::after { content:""; position:absolute; top:2px; left:2px; width:17px; height:17px;
+    border-radius:50%; background:#fff; transition:left var(--t-mid) var(--ease); box-shadow:0 1px 2px rgba(0,0,0,.2); }
+  .pd-switch.on { background:var(--c1); }
+  .pd-switch.on::after { left:19px; }
+  .pd-switch:disabled { opacity:.4; cursor:not-allowed; }
+
+  .lnk { display:flex; align-items:center; justify-content:space-between; padding:9px 0; cursor:pointer; }
+  .lnk .k { font-size:13px; color:var(--ctx); }
+  .lnk:hover .k { color:var(--c1); }
+  .lnk svg { color:var(--ctx2); transition:transform var(--t-mid) var(--ease); }
+  .lnk.open svg { transform:rotate(90deg); }
+
+  .dlist { display:none; margin:2px 0 4px; }
+  .dlist.open { display:block; }
+  .dlist .empty { font-size:12px; color:var(--ctx2); padding:6px 0; }
+  .dlist .row { display:flex; align-items:center; justify-content:space-between; gap:8px;
+    padding:6px 9px; border-radius:var(--r-ctl); background:var(--cbg); border:1px solid var(--cbd); margin-bottom:5px; }
+  .dlist .row .h { font-size:12px; color:var(--ctx); word-break:break-all; }
+  .dlist .row button { border:0; background:transparent; color:var(--ctx2); cursor:pointer;
+    width:20px; height:20px; border-radius:6px; display:flex; align-items:center; justify-content:center; flex:none; }
+  .dlist .row button:hover { color:var(--cd); background:rgba(178,58,46,.10); }
+
+  .notice { display:flex; gap:8px; padding:9px 10px; border-radius:var(--r-ctl); font-size:11.5px; line-height:1.5;
+    border:1px solid var(--cbd); background:var(--cbg); color:var(--ctx2); margin-top:8px; }
+  .notice svg { width:15px; height:15px; flex:none; margin-top:1px; }
+  .notice.warn { border-color:rgba(178,58,46,.35); background:rgba(178,58,46,.07); color:var(--ctx); }
+  .notice.warn svg { color:var(--cd); }
+  .notice.hidden { display:none; }
+</style>
+</head>
+<body>
+  <div class="phead">
+    <span class="ball"><img id="brand-logo" alt="PigeonDeck" /></span>
+    <div>
+      <div class="pname">PigeonDeck</div>
+      <div class="psite" id="site-host">—</div>
+    </div>
+  </div>
+  <div class="pbd">
+    <div class="stat" id="stat"><span class="dot"></span><span id="stat-text" data-i18n="popup_status_running">Running · this page supports annotation</span></div>
+
+    <div class="pd-srow"><span class="k" data-i18n="popup_global_disable">Disable globally</span>
+      <button class="pd-switch" id="sw-global" aria-pressed="false"></button></div>
+    <div class="pd-srow"><span class="k" data-i18n="popup_site_disable">Disable on this site</span>
+      <button class="pd-switch" id="sw-site" aria-pressed="false"></button></div>
+
+    <div class="lnk" id="list-toggle"><span class="k" data-i18n="popup_disabled_list">Disabled sites</span>
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></div>
+    <div class="dlist" id="dlist"></div>
+
+    <div class="notice hidden" id="notice-file">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/></svg>
+      <span data-i18n="popup_file_notice">file:// pages need "Allow access to file URLs" enabled in the extension details.</span>
+    </div>
+    <div class="notice warn hidden" id="notice-pdf">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m21.7 18-8-14a2 2 0 0 0-3.4 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.7-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+      <span data-i18n="popup_pdf_notice">This page is a PDF; annotation is not supported in V1.</span>
+    </div>
+  </div>
+  <script src="popup.js"></script>
+</body>
+</html>
