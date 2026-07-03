@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Coding — 阶段 13：Popup 与后台（2026-07-03）
+
+- Popup 弹窗（`public/popup.html` + `public/popup.js`，静态扩展页，chrome.i18n）：品牌头（logo + 名称 + 当前站点 host + 运行状态）+ 状态条（运行中/全局已禁用/本站已禁用/不支持页面）+ 全局禁用开关 + 当前站点禁用开关 + 禁用站点列表（内联展开 + 移除）+ file:// 权限提示（`chrome.extension.isAllowedFileSchemeAccess`）+ PDF 不支持提示（url 以 .pdf 结尾）；照搬 preview part 16
+- 禁用数据模型（`src/state/disable.ts`）：`chrome.storage.local` 存 `pdDisabledGlobal`（全局）+ `pdDisabledSites`（host 列表）；纯函数 `isPageDisabled(url, global, sites)`（全局禁用 / host 精确命中 → true，无效 url 不禁用）+ `hostOf`；`loadDisableState`/`setGlobalDisabled`/`setSiteDisabled` 存取
+- 内容脚本注入守卫 + 实时启停（`src/content/main.ts`）：inject 前查禁用态跳过注入；`registerDisableWatcher` 监听 `storage.onChanged`，**仅当当前页禁用态与注入态矛盾时 `location.reload()`**（禁用→重载跳过注入 UI 消失；启用→重载恢复注入 + sessionStorage 标注天然恢复），无残留监听 bug
+- 右键菜单（`src/background/service-worker.ts`）：`onInstalled` 内 `removeAll → create`「用 PigeonDeck 快速标注」（contexts page/selection）；`onClicked` → `chrome.tabs.sendMessage({type:'pd-context-annotate'})` → 内容脚本 `controller.expand()` 展开工具盘进入批注；`manifest` 加 `contextMenus` 权限
+- manifest：加 `action`（default_popup）；权限最小化（仅 storage + contextMenus，tab.url 靠既有 host_permissions）
+- i18n：popup + 右键菜单全部文案，中英双语
+- 单测：`disable.test.ts` 13 条（isPageDisabled 全局/站点命中/未命中/无效 url/端口·子域精确匹配、hostOf）
+- E2E：`tests/e2e/popup.spec.ts` 3 用例（popup 渲染 + 禁用列表展开 + **注入守卫：设 storage 禁用后新开页 `#pd-host` 不注入**）+ `context-menu.spec.ts` 1 用例（经 SW 发 pd-context-annotate → 工具盘展开）；浏览器原生右键菜单显示/点击、popup 开关→活动标签 reload 联动列为手动冒烟（persistent-context 限制）
+
 ### Coding — 阶段 12：安装说明页（2026-07-03）
 
 - 安装说明页（`public/onboarding.html` + `public/onboarding.js`，静态扩展页，构建时复制到 dist/）：自包含品牌风格教程——品牌头（logo + 标题 + 副标题）→ 快速上手 4 步 → 示例验收场景 → 功能总览 8 项网格 → 页脚（版本号 + GitHub）；文案 `data-i18n` + `chrome.i18n.getMessage`（与 manifest `__MSG_*__` 同源），零硬编码
@@ -263,7 +274,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | 10 | ~~清空确认：贴工具盘确认弹层~~ ✅ |
 | 11 | ~~设置面板：4 分区 + 贴工具盘~~ ✅ |
 | 12 | ~~安装说明页：首次自动打开 + 设置可重看~~ ✅ |
-| 13 | Popup 与后台：Service Worker + 右键菜单 + file:// + PDF 提示 |
+| 13 | ~~Popup 与后台：Service Worker + 右键菜单 + file:// + PDF 提示~~ ✅ |
 | 14 | i18n 完整化：中英双语全覆盖 |
 | 15 | 测试：Vitest 单测 + Playwright E2E + 手动冒烟 |
 
