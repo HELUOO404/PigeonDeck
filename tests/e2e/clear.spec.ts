@@ -36,11 +36,9 @@ async function openFixturePage(): Promise<Page> {
   const page = await context.newPage();
   await page.goto(`${server.baseUrl}/basic.html`);
   await waitForExtensionInjected(page);
-  // 把工具盘挪离右下角：确认弹层（212px）锚在清空按钮，向右展开时不被视口右缘
-  // 夹回、其右侧「确认」按钮不会压到更高 z 层的工具盘列（否则点击会落到工具盘）。
-  await page.evaluate(() =>
-    localStorage.setItem('pigeondeck.pos', JSON.stringify({ right: 500, bottom: 260 }))
-  );
+  // 默认右下角位置：确认弹层贴清空按钮「侧边」弹出（clear.ts positionBeside），
+  // 不与工具盘纵向列重叠，故确认按钮在默认位置即可点击。
+  await page.evaluate(() => localStorage.removeItem('pigeondeck.pos'));
   await page.reload();
   await waitForExtensionInjected(page);
   return page;

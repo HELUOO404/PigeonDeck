@@ -98,6 +98,32 @@ export class ClearManager {
       clearBtn.classList.remove('clear-danger');
       this.popover = null;
     });
+    // 工具盘是屏幕边缘的纵向列，弹层须贴按钮「侧边」而非上/下方——否则会与
+    // 工具盘列重叠，而 control 层 z-index(4) > panel 层(3) 会遮住确认按钮。
+    // 照 part 14 意图：默认贴按钮左侧（工具盘通常靠右缘），左侧放不下再放右侧。
+    this.positionBeside(surface, clearBtn);
+  }
+
+  /** 把确认弹层定位到锚点侧边（左优先，放不下改右），竖直居中并夹紧视口 */
+  private positionBeside(surface: HTMLElement, anchor: HTMLElement): void {
+    const GAP = 10;
+    const EDGE = 8;
+    const rect = anchor.getBoundingClientRect();
+    const w = surface.offsetWidth;
+    const h = surface.offsetHeight;
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    let left = rect.left - GAP - w;
+    if (left < EDGE) {
+      const right = rect.right + GAP;
+      left = right + w <= vw - EDGE ? right : Math.max(EDGE, vw - w - EDGE);
+    }
+    let top = rect.top + rect.height / 2 - h / 2;
+    top = Math.max(EDGE, Math.min(top, vh - h - EDGE));
+
+    surface.style.left = `${left}px`;
+    surface.style.top = `${top}px`;
   }
 
   /**
