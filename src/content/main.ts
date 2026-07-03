@@ -16,6 +16,7 @@ import { AnnotationStore, Annotation } from '../state/annotations';
 import { History } from '../state/history';
 import { restoreSession, bindSessionPersistence } from '../state/session';
 import { loadSettings, Settings } from '../state/settings';
+import { loadDisableState, isPageDisabled, KEY_GLOBAL, KEY_SITES } from '../state/disable';
 import { DirectEditManager } from './direct-edit';
 import { RegionSelectManager } from './region-select';
 import { SelectionResolver } from './selection';
@@ -84,6 +85,17 @@ function inject(settings: Settings): void {
   // 实例化 Controller
   const controller = new Controller();
   const controlLayer = shadow.querySelector<HTMLElement>('[data-layer="control"]')!;
+
+  // 阶段 13b：右键菜单「快速标注」→ 展开工具盘（= 进入批注模式）
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (
+      typeof msg === 'object' &&
+      msg !== null &&
+      (msg as Record<string, unknown>)['type'] === 'pd-context-annotate'
+    ) {
+      controller.expand();
+    }
+  });
 
   // 批注链路：Store + 会话恢复 + 覆盖层 + 面板 + 轻提示
   const panelLayer = shadow.querySelector<HTMLElement>('[data-layer="panel"]')!;
@@ -220,9 +232,41 @@ function inject(settings: Settings): void {
   logger.info('Shadow DOM injected with toolbar + annotation');
 }
 
+/**
+ * 监听禁用状态变化：仅当「当前页禁用态实际翻转」（与当前是否已注入矛盾）时
+ * reload。用重载实现实时启停——禁用后重载守卫跳过注入（UI 消失），启用后
+ * 重载恢复注入（标注在 sessionStorage 天然恢复）。无残留监听 bug。
+ */
+function registerDisableWatcher(): void {
+  if (!chrome?.storage?.onChanged) return;
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== 'local') return;
+    if (!(KEY_GLOBAL in changes) && !(KEY_SITES in changes)) return;
+    void loadDisableState().then((dis) => {
+      const shouldBeDisabled = isPageDisabled(location.href, dis.global, dis.sites);
+      const isInjected = !!document.getElementById(HOST_ID);
+      // 只在禁用态与注入态矛盾时重载，避免无关变化误刷。
+      if (shouldBeDisabled === isInjected) {
+        location.reload();
+      }
+    });
+  });
+}
+
 async function main(): Promise<void> {
   await loadLocale();
   const settings = await loadSettings();
+
+  // 无论是否注入，都注册禁用状态监听（Popup 切换开关后本页据此重载）。
+  registerDisableWatcher();
+
+  // 注入守卫：全局禁用 or 当前站点在禁用列表 → 跳过注入。
+  const dis = await loadDisableState();
+  if (isPageDisabled(location.href, dis.global, dis.sites)) {
+    logger.info('disabled on this page, skip inject');
+    return;
+  }
+
   inject(settings);
 }
 

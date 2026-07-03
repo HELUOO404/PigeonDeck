@@ -306,5 +306,20 @@
   "onboarding_feat_settings": { "message": "设置", "description": "功能名" },
   "onboarding_feat_settings_desc": { "message": "主题、语言、导出选项等。", "description": "功能描述" },
   "onboarding_footer": { "message": "为网页验收与 AI 辅助交付而生。", "description": "安装说明页页脚标语" },
-  "onboarding_github": { "message": "在 GitHub 查看", "description": "安装说明页页脚 GitHub 链接文案" }
+  "onboarding_github": { "message": "在 GitHub 查看", "description": "安装说明页页脚 GitHub 链接文案" },
+  "popup_title": { "message": "PigeonDeck", "description": "弹窗文档标题" },
+  "popup_current_site": { "message": "当前站点", "description": "弹窗当前站点标签" },
+  "popup_unsupported_site": { "message": "不支持的页面", "description": "弹窗无可标注 host 时的站点行文案" },
+  "popup_status_running": { "message": "运行中 · 本页支持标注", "description": "弹窗状态：扩展在本页运行中" },
+  "popup_status_global_off": { "message": "已全局禁用", "description": "弹窗状态：扩展已全局禁用" },
+  "popup_status_site_off": { "message": "已在本站禁用", "description": "弹窗状态：扩展在本站已禁用" },
+  "popup_status_unsupported": { "message": "此页面不受支持", "description": "弹窗状态：不支持的页面（PDF、chrome:// 等）" },
+  "popup_global_disable": { "message": "全局禁用", "description": "弹窗全局禁用开关标签" },
+  "popup_site_disable": { "message": "在当前站点禁用", "description": "弹窗当前站点禁用开关标签" },
+  "popup_disabled_list": { "message": "禁用站点列表", "description": "弹窗禁用站点列表入口标签" },
+  "popup_list_empty": { "message": "无", "description": "弹窗禁用站点列表空状态" },
+  "popup_remove": { "message": "移除", "description": "弹窗移除禁用站点按钮 aria-label" },
+  "popup_file_notice": { "message": "file:// 页面需在扩展详情中开启「允许访问文件网址」。", "description": "弹窗 file:// 页面提示" },
+  "popup_pdf_notice": { "message": "此页为 PDF，V1 暂不支持标注。", "description": "弹窗 PDF 页面提示" },
+  "ctx_quick_annotate": { "message": "用 PigeonDeck 快速标注", "description": "右键菜单：快速标注入口" }
 }
