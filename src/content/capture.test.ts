@@ -1,13 +1,18 @@
 /* ============================================================
-   capture.test.ts — computeCaptureRange / planScreens 纯函数单测
+   capture.test.ts — computeCaptureRange / planScreens / layoutOverlay 纯函数单测
    ============================================================ */
 
 import { describe, it, expect } from 'vitest';
 import {
   computeCaptureRange,
   planScreens,
+  layoutOverlay,
   DocRect,
   MAX_CAPTURE_HEIGHT,
+  MARK_INSET,
+  PIN_OFFSET,
+  PIN_DIAMETER,
+  CaptureRange,
 } from './capture';
 
 // ============================================================
@@ -130,5 +135,42 @@ describe('planScreens', () => {
     // rangeTop=100, height=400, viewportH=800（单屏）
     const screens = planScreens(100, 400, 800);
     expect(screens).toEqual([100]);
+  });
+});
+
+// ============================================================
+// layoutOverlay
+// ============================================================
+
+describe('layoutOverlay', () => {
+  const range: CaptureRange = { top: 100, height: 2000, width: 1280, truncated: false };
+
+  it('元素框：inset 外扩 + Y 减 range.top', () => {
+    const docRect: DocRect = { x: 200, y: 300, w: 100, h: 50 };
+    const layout = layoutOverlay(docRect, range, MARK_INSET);
+    // box: x=200-3=197, y=300-100-3=197, w=100+6=106, h=50+6=56
+    expect(layout.box).toEqual({ x: 197, y: 197, w: 106, h: 56 });
+  });
+
+  it('位号圆贴框左上角，偏移 PIN_OFFSET，直径 PIN_DIAMETER', () => {
+    const docRect: DocRect = { x: 200, y: 300, w: 100, h: 50 };
+    const layout = layoutOverlay(docRect, range, MARK_INSET);
+    // pin: x=197-11=186, y=197-11=186, d=22
+    expect(layout.pin).toEqual({ x: 186, y: 186, d: PIN_DIAMETER });
+  });
+
+  it('区域框：inset=0 时 box 等于文档矩形（Y 减 top）', () => {
+    const docRect: DocRect = { x: 50, y: 500, w: 300, h: 200 };
+    const layout = layoutOverlay(docRect, range, 0);
+    expect(layout.box).toEqual({ x: 50, y: 400, w: 300, h: 200 });
+    // pin 仍按 box 左上角偏移
+    expect(layout.pin).toEqual({ x: 50 - PIN_OFFSET, y: 400 - PIN_OFFSET, d: PIN_DIAMETER });
+  });
+
+  it('range.top=0 时 Y 不偏移', () => {
+    const zeroRange: CaptureRange = { top: 0, height: 1000, width: 800, truncated: false };
+    const docRect: DocRect = { x: 10, y: 20, w: 40, h: 40 };
+    const layout = layoutOverlay(docRect, zeroRange, 0);
+    expect(layout.box).toEqual({ x: 10, y: 20, w: 40, h: 40 });
   });
 });

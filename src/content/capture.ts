@@ -7,6 +7,7 @@
 
 import { Controller } from './controller';
 import { AnnotationStore, Annotation } from '../state/annotations';
+import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { t } from './i18n';
 
@@ -100,43 +101,266 @@ export function planScreens(
 }
 
 // ============================================================
+// 叠加绘制坐标（阶段 9b，纯函数可单测）
+// ============================================================
+
+/** 标注框相对目标元素外扩（overlay.ts MARK_INSET） */
+export const MARK_INSET = 3;
+/** 位号圆相对标注框左上角偏移（overlay.ts PIN_OFFSET） */
+export const PIN_OFFSET = 11;
+/** 位号圆直径（pigeonlib .pd-pin 22px） */
+export const PIN_DIAMETER = 22;
+
+/** 叠加元素在拼接 canvas 上的布局（canvas 坐标 = CSS px） */
+export interface OverlayLayout {
+  /** 标注框/区域框矩形（canvas 坐标） */
+  box: { x: number; y: number; w: number; h: number };
+  /** 位号圆左上角 + 直径（canvas 坐标） */
+  pin: { x: number; y: number; d: number };
+}
+
+/**
+ * 纯函数：把标注的文档坐标矩形换算到拼接 canvas 坐标。
+ * canvas 与截图同为 CSS px，坐标 = 文档坐标 − range.top（Y 方向）。
+ * @param docRect 文档坐标矩形
+ * @param range   截图范围（提供 top 偏移）
+ * @param inset   框相对元素外扩量（元素=MARK_INSET，区域=0）
+ */
+export function layoutOverlay(
+  docRect: DocRect,
+  range: CaptureRange,
+  inset: number
+): OverlayLayout {
+  const bx = docRect.x - inset;
+  const by = docRect.y - range.top - inset;
+  const bw = docRect.w + inset * 2;
+  const bh = docRect.h + inset * 2;
+  return {
+    box: { x: bx, y: by, w: bw, h: bh },
+    pin: { x: bx - PIN_OFFSET, y: by - PIN_OFFSET, d: PIN_DIAMETER },
+  };
+}
+
+// ============================================================
 // 运行时辅助（有 DOM/chrome 依赖，不单测）
 // ============================================================
 
-/** 将 Annotation 列表转换为文档坐标矩形（运行时，有 DOM 访问） */
-function collectDocRects(annotations: Annotation[]): DocRect[] {
+/** 一个待叠加绘制的标注项（运行时收集，含文档坐标） */
+interface OverlayItem {
+  number: number;
+  kind: 'element' | 'region';
+  /** 主框：元素标注框 / 区域框；被移动元素时 = 初始（源）位置 */
+  box: DocRect;
+  /** 移动预览幽灵框（最终位置），仅被移动元素存在 */
+  ghost?: DocRect;
+}
+
+/**
+ * 收集所有标注的文档坐标叠加项（运行时，有 DOM 访问）。
+ * 元素标注取实时 getBoundingClientRect（含 transform 预览 = 最终位置）；
+ * 被移动元素反推初始位置 = 最终 − (dx, dy)，最终位置作为幽灵框。
+ */
+function collectOverlayItems(annotations: Annotation[]): OverlayItem[] {
   const sx = window.scrollX;
   const sy = window.scrollY;
-  const result: DocRect[] = [];
+  const items: OverlayItem[] = [];
 
   for (const a of annotations) {
     // 区域标注：docRect 本身已是文档坐标
     if (a.kind === 'region' && a.region) {
       const r = a.region.docRect;
-      if (r.w > 0 && r.h > 0) result.push({ x: r.x, y: r.y, w: r.w, h: r.h });
+      if (r.w > 0 && r.h > 0) {
+        items.push({ number: a.number, kind: 'region', box: { x: r.x, y: r.y, w: r.w, h: r.h } });
+      }
       continue;
     }
-    // 元素标注：优先从 DOM 取当前位置
+
+    // 元素标注：优先实时 DOM 位置，回退 viewportPos
+    let rect: DocRect | null = null;
     try {
       const el = document.querySelector(a.selector);
       if (el) {
         const r = el.getBoundingClientRect();
         if (r.width > 0 && r.height > 0) {
-          result.push({ x: r.left + sx, y: r.top + sy, w: r.width, h: r.height });
-          continue;
+          rect = { x: r.left + sx, y: r.top + sy, w: r.width, h: r.height };
         }
       }
     } catch {
       // 无效 selector：静默忽略，走 fallback
     }
-    // Fallback：viewportPos + 当前 scroll（近似）
-    const vp = a.viewportPos;
-    if (vp.w > 0 && vp.h > 0) {
-      result.push({ x: vp.x + sx, y: vp.y + sy, w: vp.w, h: vp.h });
+    if (!rect) {
+      const vp = a.viewportPos;
+      if (vp.w > 0 && vp.h > 0) rect = { x: vp.x + sx, y: vp.y + sy, w: vp.w, h: vp.h };
+    }
+    if (!rect) continue;
+
+    if (a.move) {
+      // rect（实时）= 应用 transform 后的最终位置；初始位置 = 最终 − 累计位移
+      const finalRect = rect;
+      const initialRect: DocRect = {
+        x: finalRect.x - a.move.dx,
+        y: finalRect.y - a.move.dy,
+        w: finalRect.w,
+        h: finalRect.h,
+      };
+      items.push({ number: a.number, kind: 'element', box: initialRect, ghost: finalRect });
+    } else {
+      items.push({ number: a.number, kind: 'element', box: rect });
     }
   }
 
-  return result;
+  return items;
+}
+
+/** OverlayItem 列表铺平为范围计算用的矩形（含幽灵框） */
+function itemsToRects(items: OverlayItem[]): DocRect[] {
+  const rects: DocRect[] = [];
+  for (const it of items) {
+    rects.push(it.box);
+    if (it.ghost) rects.push(it.ghost);
+  }
+  return rects;
+}
+
+// ---- Canvas 叠加绘制（有 canvas 依赖，不单测；坐标换算复用 layoutOverlay） ----
+
+/** 邮政金（pigeonlib --c1 亮色值，截图为页面故用亮色） */
+const GOLD = '#b8842c';
+const GOLD_SOFT = 'rgba(184,132,44,0.12)';
+const PIN_SHADOW = 'rgba(120,84,20,0.5)';
+const PIN_FONT = '600 12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+/** 圆角矩形路径 */
+function roundRectPath(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number
+): void {
+  const rr = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + rr, y);
+  ctx.arcTo(x + w, y, x + w, y + h, rr);
+  ctx.arcTo(x + w, y + h, x, y + h, rr);
+  ctx.arcTo(x, y + h, x, y, rr);
+  ctx.arcTo(x, y, x + w, y, rr);
+  ctx.closePath();
+}
+
+/** 画位号圆（金底白字 + 阴影，贴框左上角） */
+function drawPin(ctx: CanvasRenderingContext2D, pin: OverlayLayout['pin'], num: number): void {
+  const cx = pin.x + pin.d / 2;
+  const cy = pin.y + pin.d / 2;
+  const r = pin.d / 2;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = GOLD;
+  ctx.shadowColor = PIN_SHADOW;
+  ctx.shadowBlur = 4;
+  ctx.shadowOffsetY = 1;
+  ctx.fill();
+  ctx.restore();
+
+  ctx.save();
+  ctx.fillStyle = '#fff';
+  ctx.font = PIN_FONT;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(num), cx, cy);
+  ctx.restore();
+}
+
+/**
+ * 程序化重绘所有叠加层到拼接 canvas（编号/框/区域/移动预览/连线）。
+ * 不截页面已有 UI，全部按标注文档坐标重画（照搬 pigeonlib 视觉值）。
+ */
+export function drawOverlays(
+  ctx: CanvasRenderingContext2D,
+  items: OverlayItem[],
+  range: CaptureRange
+): void {
+  for (const item of items) {
+    const inset = item.kind === 'region' ? 0 : MARK_INSET;
+    const layout = layoutOverlay(item.box, range, inset);
+
+    // 区域框：填充软金底
+    if (item.kind === 'region') {
+      ctx.fillStyle = GOLD_SOFT;
+      roundRectPath(ctx, layout.box.x, layout.box.y, layout.box.w, layout.box.h, 6);
+      ctx.fill();
+    }
+
+    // 移动预览：幽灵框（最终位置）+ 连线（源框中心 → 幽灵框中心）
+    if (item.ghost) {
+      const ghost = layoutOverlay(item.ghost, range, MARK_INSET);
+      // 连线（虚线）先画，压在框下
+      ctx.save();
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 1.2;
+      ctx.strokeStyle = GOLD;
+      ctx.beginPath();
+      ctx.moveTo(layout.box.x + layout.box.w / 2, layout.box.y + layout.box.h / 2);
+      ctx.lineTo(ghost.box.x + ghost.box.w / 2, ghost.box.y + ghost.box.h / 2);
+      ctx.stroke();
+      ctx.restore();
+      // 幽灵框轮廓
+      ctx.save();
+      ctx.strokeStyle = GOLD;
+      ctx.lineWidth = 1.5;
+      roundRectPath(ctx, ghost.box.x, ghost.box.y, ghost.box.w, ghost.box.h, 6);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    // 标注框 / 区域框描边
+    ctx.save();
+    ctx.strokeStyle = GOLD;
+    ctx.lineWidth = 1.5;
+    roundRectPath(ctx, layout.box.x, layout.box.y, layout.box.w, layout.box.h, 6);
+    ctx.stroke();
+    ctx.restore();
+
+    // 位号圆
+    drawPin(ctx, layout.pin, item.number);
+  }
+}
+
+/** 元数据水印：长图底部「URL · 时间戳」低调小字（左下角浅底药丸） */
+export function drawWatermark(
+  ctx: CanvasRenderingContext2D,
+  range: CaptureRange,
+  url: string,
+  timestamp: string
+): void {
+  const text = `${url} · ${timestamp}`;
+  ctx.save();
+  ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+  const padX = 9;
+  const pillH = 20;
+  const metrics = ctx.measureText(text);
+  const pillW = metrics.width + padX * 2;
+  const pillX = 8;
+  const pillY = range.height - pillH - 8;
+
+  ctx.fillStyle = 'rgba(255,255,255,0.82)';
+  roundRectPath(ctx, pillX, pillY, pillW, pillH, 4);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(60,66,80,0.9)';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(text, pillX + padX, pillY + pillH / 2);
+  ctx.restore();
+}
+
+/** 'YYYY-MM-DD HH:mm' 本地时间戳（与 copy-text 一致） */
+function formatTimestamp(d = new Date()): string {
+  const p = (n: number): string => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
 }
 
 /** 等待指定毫秒 */
@@ -256,22 +480,24 @@ const CAPTURE_PADDING = 80;
 export class CopyImageManager {
   private controller: Controller;
   private store: AnnotationStore;
+  private settings: Settings;
   private toast: Toast;
   private panelLayer: HTMLElement;
   private panelEl: HTMLElement | null = null;
   private outsideHandler: ((ev: MouseEvent) => void) | null = null;
   private keyHandler: ((ev: KeyboardEvent) => void) | null = null;
-  /** 当前截图 canvas（9b 叠加用） */
   private currentCanvas: HTMLCanvasElement | null = null;
 
   constructor(opts: {
     controller: Controller;
     store: AnnotationStore;
+    settings: Settings;
     toast: Toast;
     panelLayer: HTMLElement;
   }) {
     this.controller = opts.controller;
     this.store = opts.store;
+    this.settings = opts.settings;
     this.toast = opts.toast;
     this.panelLayer = opts.panelLayer;
 
@@ -291,15 +517,19 @@ export class CopyImageManager {
     this.toast.show(t('toast_capture_generating'));
 
     try {
-      const rects = collectDocRects(annotations);
-      if (rects.length === 0) {
+      const items = collectOverlayItems(annotations);
+      if (items.length === 0) {
         this.toast.show(t('toast_capture_failed'));
         return;
       }
 
-      const docWidth =
-        Math.max(document.documentElement.scrollWidth, window.innerWidth);
-      const range = computeCaptureRange(rects, CAPTURE_PADDING, MAX_CAPTURE_HEIGHT, docWidth);
+      const docWidth = Math.max(document.documentElement.scrollWidth, window.innerWidth);
+      const range = computeCaptureRange(
+        itemsToRects(items),
+        CAPTURE_PADDING,
+        MAX_CAPTURE_HEIGHT,
+        docWidth
+      );
 
       if (range.height === 0) {
         this.toast.show(t('toast_capture_failed'));
@@ -307,11 +537,33 @@ export class CopyImageManager {
       }
 
       const canvas = await captureStitched(range);
+
+      // 叠加绘制：编号/框/区域/移动预览/连线 + 可选水印
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        drawOverlays(ctx, items, range);
+        if (this.settings.watermark) {
+          drawWatermark(ctx, range, location.href, formatTimestamp());
+        }
+      }
+
       this.currentCanvas = canvas;
       this.openPanel(canvas);
+
+      // 按 imageMethod 自动执行一次（弹窗仍展示两键）
+      this.autoExport();
     } catch (err) {
       console.error('[PigeonDeck] captureStitched failed', err);
       this.toast.show(t('toast_capture_failed'));
+    }
+  }
+
+  /** 生成后按设置自动执行剪贴板 / 下载 */
+  private autoExport(): void {
+    if (this.settings.imageMethod === 'download') {
+      this.download();
+    } else {
+      this.copyToClipboard();
     }
   }
 
@@ -364,8 +616,7 @@ export class CopyImageManager {
     btnCopy.setAttribute('data-testid', 'pd-image-copy');
     btnCopy.innerHTML = ICON_COPY;
     btnCopy.appendChild(document.createTextNode(t('output_copy')));
-    // 9b 接入剪贴板；9a 先下载代替
-    btnCopy.addEventListener('click', () => this.download());
+    btnCopy.addEventListener('click', () => this.copyToClipboard());
     foot.appendChild(btnCopy);
 
     panel.appendChild(foot);
@@ -421,14 +672,40 @@ export class CopyImageManager {
     }
   }
 
-  // ---- 下载 ----
+  // ---- 剪贴板 / 下载 ----
 
+  /** 复制 PNG 到剪贴板（ClipboardItem，手势内或生成后自动触发） */
+  private copyToClipboard(): void {
+    if (!this.currentCanvas) return;
+    this.currentCanvas.toBlob((blob) => {
+      if (
+        !blob ||
+        typeof ClipboardItem === 'undefined' ||
+        !navigator.clipboard ||
+        typeof navigator.clipboard.write !== 'function'
+      ) {
+        this.toast.show(t('toast_capture_copy_failed'));
+        return;
+      }
+      navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]).then(
+        () => this.toast.show(t('toast_capture_copied'), 'ok'),
+        () => this.toast.show(t('toast_capture_copy_failed'))
+      );
+    }, 'image/png');
+  }
+
+  /** 下载为 PNG 文件（toBlob → blob URL → 撤销） */
   private download(): void {
     if (!this.currentCanvas) return;
-    const url = this.currentCanvas.toDataURL('image/png');
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'pigeondeck-capture.png';
-    a.click();
+    this.currentCanvas.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'pigeondeck-capture.png';
+      a.click();
+      URL.revokeObjectURL(url);
+      this.toast.show(t('toast_capture_downloaded'), 'ok');
+    }, 'image/png');
   }
 }

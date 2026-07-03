@@ -166,10 +166,11 @@ function inject(settings: Settings): void {
     panelLayer,
   });
 
-  // 阶段 9a：复制图片（截图拼接管线 + 基础结果弹窗）
+  // 阶段 9a/9b：复制图片（截图拼接 + 叠加绘制 + 剪贴板/下载 + 水印）
   new CopyImageManager({
     controller,
     store,
+    settings,
     toast,
     panelLayer,
   });

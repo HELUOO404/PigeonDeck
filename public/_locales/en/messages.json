@@ -211,5 +211,8 @@
   "toast_capture_generating": { "message": "Generating screenshot…", "description": "Toast shown while capture pipeline is running" },
   "toast_capture_empty": { "message": "Nothing to capture yet", "description": "Toast when copy-image is triggered with no annotations" },
   "toast_capture_failed": { "message": "Screenshot failed; check extension permissions", "description": "Toast when captureVisibleTab or stitching fails" },
+  "toast_capture_copied": { "message": "Image copied to clipboard", "description": "Toast after copying the capture image to clipboard" },
+  "toast_capture_copy_failed": { "message": "Copy failed; use Download instead", "description": "Toast when clipboard image write is denied" },
+  "toast_capture_downloaded": { "message": "Image downloaded", "description": "Toast after downloading the capture image" },
   "output_img_download": { "message": "Download as PNG", "description": "Copy-image result popup: download button tooltip" }
 }
