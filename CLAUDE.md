@@ -4,15 +4,16 @@
 
 ## 仓库当前阶段
 
-**编码阶段进行中**。设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施。**阶段 1–6 已完成并合并 main（已 push）**：
+**编码阶段进行中**。设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施。**阶段 1–7 已完成并合并 main（已 push）**：
 - **阶段 1 工程骨架**：Vite 双配置构建（content IIFE + background ES）、Shadow DOM 四层宿主、pigeonlib 设计令牌、i18n 框架、logger。
 - **阶段 2 工具盘与悬浮球**：模式控制器状态机、42px 悬浮球、7 按钮工具盘、tooltip、长按拖拽持久化、E2E 测试基建。
 - **阶段 3 批注模式**：3a 批注核心 + 3b 修改栏与高级样式（fields.ts 双入口单源、自制下拉/调色盘、样式修改管线→撤销历史、卡片调整项）。
 - **阶段 4 直接编辑与内联富文本**：4a 双击文本 contentEditable + Word 式富文本浮条（execCommand + 保选区 + 字号 span 改写）；4b 图片/视频替换弹层 + dataURL >1MB 只活内存。`applyChangesTo` 扩 html/src 分支。
 - **阶段 5 区域框选**：长按 300ms 拖金框 → 区域面板 → 持久框+位号；Annotation 加可选 `kind:'region'`+`region{docRect,elements}`；overlay 按 kind 分支跟随。
 - **阶段 6 移动模式**：6a move 模式选中 + `.pd-selbox` 八向句柄缩放（→width/height StyleChange）+ visual-units 组件块启发式 + selection 粒度偏移记忆 + 面板 +/- 胶囊；6b 点住即拖 `transform:translate` 预览 + `snap.ts` 纯函数吸附（边缘/中心对齐 4px）+ `.pd-guide` 参考线（白/黑反色）+ Alt free move + 多次移动合并 initial→final。Annotation 加可选 `move?`。
+- **阶段 7 撤销/重做**：`History` 加 subscribe（语义不变）；工具盘合并药丸左半撤销/右半重做按 canUndo/canRedo 订阅刷新禁用态；`shortcuts.ts` 全局键盘 Ctrl/Cmd+Z / Ctrl/Cmd+Shift+Z / Esc 仅展开态；`settings.historyLimit`（默认 50）。阶段 3–6 全操作闭环可撤销（清空复合命令留阶段 10）。
 
-门禁基线：build ✓ / typecheck ✓ / vitest 195 ✓ / e2e 38 ✓ / i18n ✓。**下一阶段：阶段 7 撤销/重做（接线合并按钮两半 + Ctrl+Z/Ctrl+Shift+Z/Esc 仅展开态 + 确认全操作已 push 命令）**。
+门禁基线：build ✓ / typecheck ✓ / vitest 197 ✓ / e2e 42 ✓ / i18n ✓。**下一阶段：阶段 8 复制文本（⭐全项目最关键路径——format.ts/copy-text.ts 纯函数管线，去重合并/同元素多操作合并成 `Annotation + Style Modification + Move`/移动只留初始→最终/Changes 表；主 session 必须逐行亲审 diff，重度 vitest）**。
 
 当前根目录有：
 - `src/` + `public/` + `scripts/` — 扩展源码、静态资源（manifest/_locales/icons/brand）、构建脚本
