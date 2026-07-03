@@ -21,11 +21,12 @@ export interface Settings {
    */
   historyLimit: number;
   /**
-   * 复制文本导出语言（蓝图 §7.1：默认英文，可切中文或跟随界面）：
-   * 'en' / 'zh_CN' = 固定语言；'auto' = 跟随界面语言（i18n locale，回退 en）。
-   * 完整设置 UI 在阶段 11，本阶段只加字段 + 消费 + 结果弹窗快切。
+   * 复制文本导出语言（蓝图 §7.1：默认英文，可切任意语言或跟随界面）：
+   * 'auto' = 跟随界面语言（i18n locale）；其余为 BCP47 code（如 'en'/'zh_CN'/'ja'）。
+   * 仅 en / zh_CN 有任务清单模板，其余 code 导出时回退英文模板（见 format.normalizeLang）。
+   * 完整搜索式选择器在阶段 11b，结果弹窗仍提供 en/zh 快切。
    */
-  exportLang: 'en' | 'zh_CN' | 'auto';
+  exportLang: string;
   /**
    * 复制图片输出方式（蓝图 §7.2）：
    * 'clipboard' = 写入剪贴板（默认）；'download' = 下载为 PNG 文件。
@@ -37,6 +38,20 @@ export interface Settings {
    * 「URL · 时间戳」小字。默认关闭。
    */
   watermark: boolean;
+  /**
+   * 亮/暗主题（蓝图 §9）：Shadow DOM host `data-theme` 切换。默认亮色。
+   */
+  theme: 'light' | 'dark';
+  /**
+   * 区域框选长按触发时长（ms，蓝图 §9）。默认 300。
+   * region-select.ts 每次长按实时读此值。
+   */
+  longPressMs: number;
+  /**
+   * 移动模式本体拖拽防误触阈值（ms，蓝图 §9）：按下后需超过此时长才进入
+   * 位移。默认 0 = 点住即拖（当前行为）。
+   */
+  dragThreshold: number;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -47,7 +62,16 @@ export const DEFAULT_SETTINGS: Settings = {
   exportLang: 'en',
   imageMethod: 'clipboard',
   watermark: false,
+  theme: 'light',
+  longPressMs: 300,
+  dragThreshold: 0,
 };
+
+/** 数值设置项夹紧到 [min, max]；非数字回退 fallback（设置面板 pd-num 用） */
+export function clampNumber(value: number, min: number, max: number, fallback: number): number {
+  if (!Number.isFinite(value)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(value)));
+}
 
 const STORAGE_KEY = 'settings';
 
