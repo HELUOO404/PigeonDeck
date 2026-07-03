@@ -126,8 +126,8 @@ function inject(settings: Settings): void {
     onRedo: () => history.redo(),
   });
 
-  // 快捷键（仅展开态：Ctrl+Z / Ctrl+Shift+Z / Esc）
-  setupShortcuts(controller, history);
+  // 快捷键（仅展开态：默认 Mod+Z / Mod+Shift+Z / Escape，可在设置面板重绑）
+  setupShortcuts(controller, history, settings);
 
   const toast = new Toast(feedbackLayer);
 

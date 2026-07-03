@@ -125,6 +125,26 @@ function hostTheme(page: Page): Promise<string> {
   return page.evaluate(() => document.getElementById('pd-host')?.getAttribute('data-theme') ?? '');
 }
 
+/** 读取 Shadow DOM 内元素文本 */
+function shadowText(page: Page, testId: string): Promise<string> {
+  return page.evaluate((id: string) => {
+    const host = document.getElementById('pd-host');
+    const el = host?.shadowRoot?.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    return el?.textContent ?? '';
+  }, testId);
+}
+
+/** 经后台 service worker 读取 chrome.storage.local 里持久化的快捷键绑定 */
+async function storedShortcuts(): Promise<Record<string, string>> {
+  const workers = context.serviceWorkers();
+  if (workers.length === 0) return {};
+  return workers[0].evaluate(async () => {
+    const r = await chrome.storage.local.get('settings');
+    const s = r['settings'] as { shortcuts?: Record<string, string> } | undefined;
+    return s?.shortcuts ?? {};
+  });
+}
+
 /** 展开工具盘 + 打开设置面板 */
 async function openSettings(page: Page): Promise<void> {
   await clickShadowEl(page, 'pd-btn-settings');
@@ -376,6 +396,88 @@ test('⑫ 关「显示修改栏」→ 批注面板无修改栏、仅留说明（
   // 修改栏卡片缺席，说明文本框仍在
   expect(await shadowExists(page, '[data-testid="pd-modbox"]')).toBe(false);
   expect(await shadowExists(page, '[data-testid="pd-panel-note"]')).toBe(true);
+
+  await page.close();
+});
+
+// ============================================================
+// W6b：快捷键全量重绑（录制 / 冲突 / 恢复默认）
+// ============================================================
+
+/** 打开设置 → 交互分区 → 等快捷键录制按钮就绪 */
+async function openShortcuts(page: Page): Promise<void> {
+  await openSettings(page);
+  await clickShadowEl(page, 'pd-set-nav-interaction');
+  await waitShadowVisible(page, '[data-testid="pd-sc-record-undo"]');
+}
+
+/** 交互分区可滚动（max-height 300px），底部行需先滚入视口再按坐标点击 */
+async function clickShadowDeep(page: Page, testId: string): Promise<void> {
+  await page.evaluate((id: string) => {
+    const host = document.getElementById('pd-host');
+    const el = host?.shadowRoot?.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    el?.scrollIntoView({ block: 'center' });
+  }, testId);
+  await clickShadowEl(page, testId);
+}
+
+test('⑬ 录制新撤销绑定 → 持久化到 storage + 行内展示更新', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  // 默认展示含 Z
+  expect(await shadowText(page, 'pd-sc-combo-undo')).toContain('Z');
+
+  await clickShadowDeep(page, 'pd-sc-record-undo');
+  await page.keyboard.press('Control+y'); // → Mod+Y
+
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ undo: 'Mod+Y' });
+  // 行内组合展示随之更新
+  await expect.poll(() => shadowText(page, 'pd-sc-combo-undo'), { timeout: 5000 }).toContain('Y');
+
+  await page.close();
+});
+
+test('⑭ 冲突绑定被拒绝 → 不覆盖已有绑定 + 提示', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  // 先把撤销改成 Mod+Y（并落盘完整 settings，含默认 redo=Mod+Shift+Z）
+  await clickShadowDeep(page, 'pd-sc-record-undo');
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ undo: 'Mod+Y' });
+
+  // 录制重做，按下 Mod+Y（= 撤销现有绑定）→ 冲突
+  await clickShadowDeep(page, 'pd-sc-record-redo');
+  await page.keyboard.press('Control+y');
+
+  // 冲突提示出现
+  await waitShadowVisible(page, '[data-testid="pd-toast"]');
+  // 重做绑定未被改写（仍为默认 Mod+Shift+Z）
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ redo: 'Mod+Shift+Z' });
+  expect(await shadowText(page, 'pd-sc-combo-redo')).toContain('Shift');
+
+  await page.close();
+});
+
+test('⑮ 恢复默认 → 绑定回落 Mod+Z / Mod+Shift+Z / Escape', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  // 改一个绑定
+  await clickShadowDeep(page, 'pd-sc-record-undo');
+  await page.keyboard.press('Control+y');
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ undo: 'Mod+Y' });
+
+  // 恢复默认
+  await clickShadowDeep(page, 'pd-sc-reset');
+  await expect
+    .poll(() => storedShortcuts(), { timeout: 5000 })
+    .toMatchObject({ undo: 'Mod+Z', redo: 'Mod+Shift+Z', exit: 'Escape' });
+  await expect.poll(() => shadowText(page, 'pd-sc-combo-undo'), { timeout: 5000 }).toContain('Z');
 
   await page.close();
 });

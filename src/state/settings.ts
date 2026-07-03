@@ -56,6 +56,12 @@ export interface Settings {
    * 关闭后面板仅保留说明文本框 + 高级样式折叠区 + 底栏。
    */
   showModbar: boolean;
+  /**
+   * 键盘快捷键绑定（建议6：全量重绑，仅展开态生效）。
+   * combo 串格式见 shortcuts.formatCombo：修饰键固定序 Mod/Shift/Alt + 主键。
+   * `Mod` 为跨平台主修饰符 = Ctrl（Win/Linux）或 Cmd（Mac），故一份绑定两端通用。
+   */
+  shortcuts: { undo: string; redo: string; exit: string };
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -70,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   longPressMs: 300,
   dragThreshold: 0,
   showModbar: true,
+  shortcuts: { undo: 'Mod+Z', redo: 'Mod+Shift+Z', exit: 'Escape' },
 };
 
 /** 数值设置项夹紧到 [min, max]；非数字回退 fallback（设置面板 pd-num 用） */
@@ -86,12 +93,16 @@ export async function loadSettings(): Promise<Settings> {
     const result = await chrome.storage.local.get(STORAGE_KEY);
     const stored = result[STORAGE_KEY];
     if (stored && typeof stored === 'object') {
-      return { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
+      const merged = { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
+      // shortcuts 为嵌套对象：浅合并会整体替换，旧存储的残缺对象可能丢键；
+      // 这里用默认填补缺失键，并始终新建对象（避免与 DEFAULT_SETTINGS.shortcuts 共享引用被面板改写）。
+      merged.shortcuts = { ...DEFAULT_SETTINGS.shortcuts, ...merged.shortcuts };
+      return merged;
     }
   } catch {
     // storage 不可用时静默使用默认值
   }
-  return { ...DEFAULT_SETTINGS };
+  return { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
 }
 
 /** 局部更新设置并持久化 */

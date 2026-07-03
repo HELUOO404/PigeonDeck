@@ -7,7 +7,7 @@
    ============================================================ */
 
 import { Controller } from './controller';
-import { Settings, saveSettings, clampNumber } from '../state/settings';
+import { Settings, DEFAULT_SETTINGS, saveSettings, clampNumber } from '../state/settings';
 import { Overlay } from './overlay';
 import { History } from '../state/history';
 import { SelectionResolver } from './selection';
@@ -17,6 +17,7 @@ import { t, getLocale, setLocale } from './i18n';
 import { openLanguagePicker } from './language-picker';
 import { BCP47_LANGUAGES } from '../shared/languages';
 import { LOGO_SVG } from './logo';
+import { formatCombo, setShortcutRecording } from './shortcuts';
 
 /** 扩展版本号（about 区展示；manifest 为发布号，V1 展示固定 1.0.0） */
 const VERSION = '1.0.0';
@@ -45,6 +46,14 @@ const IC = {
 } as const;
 
 type Section = 'general' | 'interaction' | 'output' | 'help';
+
+/** combo 串 → 可读展示：Mod → Ctrl/⌘、Escape → Esc，段间加空格（快捷键名不翻译）。 */
+function displayCombo(combo: string): string {
+  return combo
+    .split('+')
+    .map((p) => (p === 'Mod' ? 'Ctrl/⌘' : p === 'Escape' ? 'Esc' : p))
+    .join(' + ');
+}
 
 export interface SettingsManagerOptions {
   controller: Controller;
@@ -77,6 +86,10 @@ export class SettingsManager {
   private section: Section = 'general';
   private navButtons: Record<Section, HTMLButtonElement> | null = null;
   private unsubscribe: () => void;
+
+  /** 当前正在录制的快捷键动作（null = 未录制）+ 卸载录制监听器的函数。 */
+  private recordingAction: 'undo' | 'redo' | 'exit' | null = null;
+  private recordingCleanup: (() => void) | null = null;
 
   constructor(opts: SettingsManagerOptions) {
     this.controller = opts.controller;
@@ -178,6 +191,7 @@ export class SettingsManager {
 
   private close(): void {
     if (!this.panelEl) return;
+    this.cancelRecording();
     window.removeEventListener('mousedown', this.onOutside, true);
     this.panelEl.remove();
     this.panelEl = null;
@@ -224,6 +238,7 @@ export class SettingsManager {
   // ---- 分区切换 ----
 
   private switchSection(section: Section): void {
+    this.cancelRecording();
     this.section = section;
     this.renderSection();
   }
@@ -411,13 +426,111 @@ export class SettingsManager {
       )
     );
 
-    // 快捷键（V1 只读参考，不可重绑）
-    const scBtn = document.createElement('button');
-    scBtn.className = 'pd-btn';
-    scBtn.setAttribute('data-testid', 'pd-set-shortcuts');
-    scBtn.textContent = 'Ctrl+Z / Ctrl+⇧+Z / Esc';
-    // V1 简化：展示按钮，点击无操作（重绑留 V2）
-    root.appendChild(this.srow(t('set_shortcuts'), t('set_shortcuts_sub'), scBtn));
+    // 快捷键（建议6：每个动作一行，可录制重绑 + 冲突检测 + 恢复默认）
+    this.renderShortcuts(root);
+  }
+
+  /** 快捷键分区：组头（含恢复默认）+ 撤销/重做/退出工具各一行。 */
+  private renderShortcuts(root: HTMLElement): void {
+    const resetBtn = document.createElement('button');
+    resetBtn.className = 'pd-btn';
+    resetBtn.setAttribute('data-testid', 'pd-sc-reset');
+    resetBtn.textContent = t('set_sc_reset');
+    resetBtn.addEventListener('click', () => {
+      this.cancelRecording();
+      this.settings.shortcuts = { ...DEFAULT_SETTINGS.shortcuts };
+      saveSettings({ shortcuts: { ...this.settings.shortcuts } });
+      this.renderSection();
+    });
+    root.appendChild(this.srow(t('set_shortcuts'), t('set_shortcuts_sub'), resetBtn));
+
+    const actions: Array<{ key: 'undo' | 'redo' | 'exit'; label: string }> = [
+      { key: 'undo', label: t('tb_undo') },
+      { key: 'redo', label: t('tb_redo') },
+      { key: 'exit', label: t('set_sc_exit') },
+    ];
+    for (const a of actions) root.appendChild(this.shortcutRow(a.key, a.label));
+  }
+
+  /** 单条快捷键行：动作名 + 当前组合展示 + 录制按钮。 */
+  private shortcutRow(action: 'undo' | 'redo' | 'exit', label: string): HTMLElement {
+    const ctl = document.createElement('div');
+    ctl.className = 'pd-sc-ctl';
+
+    const combo = document.createElement('span');
+    combo.className = 'pd-kbd';
+    combo.setAttribute('data-testid', `pd-sc-combo-${action}`);
+    combo.textContent = displayCombo(this.settings.shortcuts[action]);
+    ctl.appendChild(combo);
+
+    const recBtn = document.createElement('button');
+    recBtn.className = 'pd-btn';
+    recBtn.setAttribute('data-testid', `pd-sc-record-${action}`);
+    recBtn.textContent = t('set_sc_record');
+    recBtn.addEventListener('click', () => this.startRecording(action, recBtn));
+    ctl.appendChild(recBtn);
+
+    return this.srow(label, null, ctl);
+  }
+
+  /** 进入录制：一次性 capture keydown 监听，捕获完整组合后校验冲突并保存。 */
+  private startRecording(action: 'undo' | 'redo' | 'exit', recBtn: HTMLButtonElement): void {
+    // 再次点同一按钮 → 取消录制
+    if (this.recordingAction === action) {
+      this.cancelRecording();
+      return;
+    }
+    // 有其它录制在进行 → 先取消
+    this.cancelRecording();
+
+    this.recordingAction = action;
+    setShortcutRecording(true);
+    recBtn.classList.add('primary');
+    recBtn.textContent = t('set_sc_recording');
+
+    const onKey = (e: KeyboardEvent): void => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const combo = formatCombo(e);
+      if (!combo) return; // 仅按下修饰键，继续等待主键
+
+      // 冲突检测：与其它动作现有绑定相同则拒绝（重绑到自身现值不算冲突）
+      const conflict = (['undo', 'redo', 'exit'] as const).some(
+        (k) => k !== action && this.settings.shortcuts[k].toLowerCase() === combo.toLowerCase()
+      );
+      if (conflict) {
+        this.toast.show(t('toast_sc_conflict'));
+        this.cancelRecording();
+        return;
+      }
+
+      this.settings.shortcuts[action] = combo;
+      saveSettings({ shortcuts: { ...this.settings.shortcuts } });
+      this.cancelRecording();
+      this.renderSection();
+    };
+
+    window.addEventListener('keydown', onKey, true);
+    this.recordingCleanup = () => window.removeEventListener('keydown', onKey, true);
+  }
+
+  /** 取消/结束录制：卸载监听、复位按钮外观、清录制标志。 */
+  private cancelRecording(): void {
+    if (this.recordingCleanup) {
+      this.recordingCleanup();
+      this.recordingCleanup = null;
+    }
+    if (this.recordingAction && this.sconEl) {
+      const btn = this.sconEl.querySelector<HTMLButtonElement>(
+        `[data-testid="pd-sc-record-${this.recordingAction}"]`
+      );
+      if (btn) {
+        btn.classList.remove('primary');
+        btn.textContent = t('set_sc_record');
+      }
+    }
+    this.recordingAction = null;
+    setShortcutRecording(false);
   }
 
   private renderOutput(root: HTMLElement): void {

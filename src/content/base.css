@@ -1668,6 +1668,10 @@
 .pd-srow .k { font-size: 13px; color: var(--ctx); }
 .pd-srow .k small { display: block; font-size: 11px; color: var(--ctx2); margin-top: 2px; }
 
+/* 快捷键行：当前组合展示 + 录制按钮 */
+.pd-sc-ctl { display: flex; align-items: center; gap: 8px; flex: none; }
+.pd-kbd { font: 500 12px var(--font-ui); color: var(--ctx2); white-space: nowrap; }
+
 /* 设置面板外壳（pigeonlib 472-484） */
 .spanel { display: flex; flex-direction: column; overflow: hidden;
           transition: height var(--t-mid) var(--ease); }
