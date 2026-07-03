@@ -104,7 +104,7 @@ function metaText(number: number, elementType: string, x: number, y: number, isR
  * 按修改记录把元素样式切到旧值/新值（撤销/重做/删除回退用）。
  * oldValue 是打开面板时的 computed/inline 值，写成 inline 视觉等价。
  */
-function applyChangesTo(target: Element | null, changes: StyleChange[], dir: 'old' | 'new'): void {
+export function applyChangesTo(target: Element | null, changes: StyleChange[], dir: 'old' | 'new'): void {
   if (!(target instanceof HTMLElement)) return;
   for (const c of changes) {
     const value = dir === 'old' ? c.oldValue : c.newValue;
