@@ -86,6 +86,17 @@ function inject(settings: Settings): void {
   const controller = new Controller();
   const controlLayer = shadow.querySelector<HTMLElement>('[data-layer="control"]')!;
 
+  // 阶段 13b：右键菜单「快速标注」→ 展开工具盘（= 进入批注模式）
+  chrome.runtime.onMessage.addListener((msg) => {
+    if (
+      typeof msg === 'object' &&
+      msg !== null &&
+      (msg as Record<string, unknown>)['type'] === 'pd-context-annotate'
+    ) {
+      controller.expand();
+    }
+  });
+
   // 批注链路：Store + 会话恢复 + 覆盖层 + 面板 + 轻提示
   const panelLayer = shadow.querySelector<HTMLElement>('[data-layer="panel"]')!;
   const overlayLayer = shadow.querySelector<HTMLElement>('[data-layer="overlay"]')!;

@@ -320,5 +320,6 @@
   "popup_list_empty": { "message": "无", "description": "弹窗禁用站点列表空状态" },
   "popup_remove": { "message": "移除", "description": "弹窗移除禁用站点按钮 aria-label" },
   "popup_file_notice": { "message": "file:// 页面需在扩展详情中开启「允许访问文件网址」。", "description": "弹窗 file:// 页面提示" },
-  "popup_pdf_notice": { "message": "此页为 PDF，V1 暂不支持标注。", "description": "弹窗 PDF 页面提示" }
+  "popup_pdf_notice": { "message": "此页为 PDF，V1 暂不支持标注。", "description": "弹窗 PDF 页面提示" },
+  "ctx_quick_annotate": { "message": "用 PigeonDeck 快速标注", "description": "右键菜单：快速标注入口" }
 }

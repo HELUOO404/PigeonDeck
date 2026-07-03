@@ -320,5 +320,6 @@
   "popup_list_empty": { "message": "None", "description": "Popup disabled-sites list empty state" },
   "popup_remove": { "message": "Remove", "description": "Popup remove disabled site button aria-label" },
   "popup_file_notice": { "message": "file:// pages need \"Allow access to file URLs\" enabled in the extension details.", "description": "Popup notice for file:// pages" },
-  "popup_pdf_notice": { "message": "This page is a PDF; annotation is not supported in V1.", "description": "Popup notice for PDF pages" }
+  "popup_pdf_notice": { "message": "This page is a PDF; annotation is not supported in V1.", "description": "Popup notice for PDF pages" },
+  "ctx_quick_annotate": { "message": "Quick annotate with PigeonDeck", "description": "Right-click context menu: quick annotate entry" }
 }

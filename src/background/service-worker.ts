@@ -1,6 +1,7 @@
 /* ============================================================
    service-worker.ts — MV3 background service worker
    阶段 9a：captureVisibleTab 截图消息处理 + 限速（≥600ms 间隔）。
+   阶段 13b：右键菜单「用 PigeonDeck 快速标注」→ 向当前 tab 转发消息。
    ============================================================ */
 
 import { logger } from '../diagnostics/logger';
@@ -8,11 +9,32 @@ import { logger } from '../diagnostics/logger';
 /** 安装说明页地址（扩展内静态页，public/onboarding.html 构建时复制到 dist/） */
 const ONBOARDING_URL = 'onboarding.html';
 
+/** 右键菜单项 id */
+const CTX_MENU_ID = 'pd-quick-annotate';
+
 chrome.runtime.onInstalled.addListener((details) => {
   logger.info('PigeonDeck installed', details.reason);
   // 阶段 12：仅首次安装自动打开安装说明页（update 时不弹）
   if (details.reason === 'install') {
     chrome.tabs.create({ url: chrome.runtime.getURL(ONBOARDING_URL) });
+  }
+  // 阶段 13b：创建右键菜单（先清再建，避免重复创建报错；SW 重启后菜单持久）
+  chrome.contextMenus.removeAll(() => {
+    chrome.contextMenus.create({
+      id: CTX_MENU_ID,
+      title: chrome.i18n.getMessage('ctx_quick_annotate'),
+      contexts: ['page', 'selection'],
+    });
+  });
+});
+
+/**
+ * 阶段 13b：右键菜单点击 → 向当前 tab 的内容脚本发「快速标注」消息。
+ * sendMessage 可能因页面无 content script 而 reject，忽略之。
+ */
+chrome.contextMenus.onClicked.addListener((info, tab) => {
+  if (info.menuItemId === CTX_MENU_ID && tab?.id != null) {
+    chrome.tabs.sendMessage(tab.id, { type: 'pd-context-annotate' }).catch(() => {});
   }
 });
 
