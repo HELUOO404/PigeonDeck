@@ -140,7 +140,7 @@ function inject(settings: Settings): void {
     onPinClick: (a) => hooks.onPinClick?.(a),
     onPinContextMenu: (a, pinEl) => hooks.onPinContextMenu?.(a, pinEl),
   });
-  const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings, history, toast);
+  const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings, history, toast, overlayLayer);
   hooks.onPinClick = panelManager.togglePinCard;
   hooks.onPinContextMenu = panelManager.openPinMenu;
 

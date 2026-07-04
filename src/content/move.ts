@@ -11,29 +11,15 @@
    ============================================================ */
 
 import { Controller } from './controller';
-import { AnnotationStore, StyleChange, MoveData, ViewportPos, mergeChanges } from '../state/annotations';
+import { AnnotationStore, MoveData, ViewportPos } from '../state/annotations';
 import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import { SelectionResolver } from './selection';
+import { SelectionBox } from './selection-box';
 import { buildSelector, isVisible } from '../shared/dom-utils';
 import { snapDrag, Rect, Guide } from './snap';
 import { pickDropTarget, pickInsertIndex, parseTranslate } from './embed';
 import { t } from './i18n';
-
-/** 八向句柄方位 */
-type HandleDir = 'tl' | 'tr' | 'bl' | 'br' | 'tm' | 'bm' | 'ml' | 'mr';
-
-/** 哪些维度受该方位影响 */
-const HANDLE_DIMS: Record<HandleDir, { w: boolean; h: boolean; wNeg: boolean; hNeg: boolean }> = {
-  tl: { w: true,  h: true,  wNeg: true,  hNeg: true  },
-  tr: { w: true,  h: true,  wNeg: false, hNeg: true  },
-  bl: { w: true,  h: true,  wNeg: true,  hNeg: false },
-  br: { w: true,  h: true,  wNeg: false, hNeg: false },
-  tm: { w: false, h: true,  wNeg: false, hNeg: true  },
-  bm: { w: false, h: true,  wNeg: false, hNeg: false },
-  ml: { w: true,  h: false, wNeg: true,  hNeg: false },
-  mr: { w: true,  h: false, wNeg: false, hNeg: false },
-};
 
 /** 吸附阈值（px，蓝图 §4.3） */
 const SNAP_THRESHOLD = 4;
@@ -67,15 +53,6 @@ function resolveTarget(selector: string): HTMLElement | null {
     return null;
   } catch {
     return null;
-  }
-}
-
-/** 应用样式变更到 HTMLElement（撤销/重做用） */
-function applyChangesToEl(el: HTMLElement | null, changes: StyleChange[], dir: 'old' | 'new'): void {
-  if (!el) return;
-  for (const c of changes) {
-    const value = dir === 'old' ? c.oldValue : c.newValue;
-    el.style.setProperty(c.cssProp, value);
   }
 }
 
@@ -115,21 +92,17 @@ export class MoveManager {
   private settings: Settings;
   private shadowHost: Element;
 
-  // 当前选中
-  private selectedEl: HTMLElement | null = null;
-  private selboxEl: HTMLElement | null = null;
+  // 当前选中（选中框 + 八向句柄缩放委派给 SelectionBox）
+  private selbox: SelectionBox;
+
+  /** 当前选中元素（源自 SelectionBox；本体拖拽/吸附/嵌入等读取它） */
+  private get selectedEl(): HTMLElement | null {
+    return this.selbox.getSelected();
+  }
 
   // hover 预览（未选中时鼠标悬浮 → 圆角高亮框，指向 click 将选中的元素）
   private hoverBoxEl: HTMLElement | null = null;
   private hoverTargetEl: HTMLElement | null = null;
-
-  // 句柄缩放拖拽状态
-  private dragging = false;
-  private dragDir: HandleDir | null = null;
-  private dragStartX = 0;
-  private dragStartY = 0;
-  private origW = 0;
-  private origH = 0;
 
   // 本体移动拖拽状态（阶段 6b）
   private moving = false;
@@ -158,7 +131,6 @@ export class MoveManager {
 
   private active = false;
   private unsubscribeController: () => void;
-  private unsubscribeHistory: () => void;
 
   constructor(opts: {
     controller: Controller;
@@ -176,13 +148,16 @@ export class MoveManager {
     this.settings = opts.settings;
     this.shadowHost = (opts.overlayLayer.getRootNode() as ShadowRoot).host;
 
+    // 选中框 + 八向句柄缩放（含 scroll/resize/history 跟随）委派给共享组件。
+    // 撤销/重做改动 transform 或重父后选中框跟随（原 Bug1/显示15）由 SelectionBox 内部处理。
+    this.selbox = new SelectionBox({
+      store: opts.store,
+      history: opts.history,
+      overlayLayer: opts.overlayLayer,
+    });
+
     this.unsubscribeController = opts.controller.subscribe(() => this.syncActive());
     this.syncActive();
-
-    // Bug1（显示15）：撤销/重做改动 el.style.transform 或重父后，选中框必须跟随。
-    // scheduleReposition 原本只绑 scroll/resize；此处订阅 history，任一 push/undo/redo
-    // 后重新按选中元素矩形定位选中框（元素已断连则清除选中）。
-    this.unsubscribeHistory = opts.history.subscribe(() => this.scheduleReposition());
 
     // capture 段：移动模式接管 click/mousedown
     window.addEventListener('click', this.onClick, true);
@@ -194,7 +169,6 @@ export class MoveManager {
 
   destroy(): void {
     this.unsubscribeController();
-    this.unsubscribeHistory();
     window.removeEventListener('click', this.onClick, true);
     window.removeEventListener('mousedown', this.onMouseDown, true);
     window.removeEventListener('mousemove', this.onHoverMove, true);
@@ -202,6 +176,7 @@ export class MoveManager {
     window.removeEventListener('resize', this.scheduleReposition);
     if (this.rafId !== null) cancelAnimationFrame(this.rafId);
     this.clearSelection();
+    this.selbox.destroy();
   }
 
   // ---- 模式同步 ----
@@ -270,49 +245,14 @@ export class MoveManager {
   // ---- 选中框 ----
 
   private selectElement(el: HTMLElement): void {
-    this.clearSelection();
-    this.selectedEl = el;
-    this.renderSelbox();
-  }
-
-  private renderSelbox(): void {
-    if (!this.selectedEl) return;
-    const rect = this.selectedEl.getBoundingClientRect();
-    if (!rect.width && !rect.height) return;
-
-    const box = document.createElement('div');
-    box.className = 'pd-selbox';
-    box.setAttribute('data-testid', 'pd-selbox');
-
-    // 定位：overlay 层是 fixed inset:0，直接用 viewport 坐标
-    box.style.left = `${rect.left}px`;
-    box.style.top = `${rect.top}px`;
-    box.style.width = `${rect.width}px`;
-    box.style.height = `${rect.height}px`;
-
-    // 八向句柄
-    const dirs: HandleDir[] = ['tl', 'tr', 'bl', 'br', 'tm', 'bm', 'ml', 'mr'];
-    for (const dir of dirs) {
-      const h = document.createElement('span');
-      h.className = `h ${dir}`;
-      h.setAttribute('data-testid', `pd-handle-${dir}`);
-      h.addEventListener('mousedown', (e) => this.onHandleMouseDown(e, dir), true);
-      box.appendChild(h);
-    }
-
-    this.overlayLayer.appendChild(box);
-    this.selboxEl = box;
+    this.clearHover();
+    this.selbox.select(el);
   }
 
   private clearSelection(): void {
-    this.selboxEl?.remove();
-    this.selboxEl = null;
-    this.selectedEl = null;
+    this.selbox.clear();
     this.clearHover();
     this.clearDropTarget();
-    if (this.dragging) {
-      this.endDrag();
-    }
     if (this.moving) {
       this.endMove();
     }
@@ -321,7 +261,7 @@ export class MoveManager {
   // ---- hover 预览（未选中/未拖拽时）----
 
   private onHoverMove = (ev: MouseEvent): void => {
-    if (!this.active || this.dragging || this.moving) {
+    if (!this.active || this.selbox.isResizing() || this.moving) {
       this.clearHover();
       return;
     }
@@ -380,116 +320,14 @@ export class MoveManager {
     this.hoverBoxEl = null;
   }
 
-  private repositionSelbox(): void {
-    if (!this.selboxEl || !this.selectedEl) return;
-    if (!this.selectedEl.isConnected) {
-      this.clearSelection();
-      return;
-    }
-    const rect = this.selectedEl.getBoundingClientRect();
-    this.selboxEl.style.left = `${rect.left}px`;
-    this.selboxEl.style.top = `${rect.top}px`;
-    this.selboxEl.style.width = `${rect.width}px`;
-    this.selboxEl.style.height = `${rect.height}px`;
-  }
-
   private scheduleReposition = (): void => {
+    // 选中框跟随 scroll/resize 由 SelectionBox 自管；此处只刷新 hover 高亮框。
     if (this.rafId !== null) return;
     this.rafId = requestAnimationFrame(() => {
       this.rafId = null;
-      this.repositionSelbox();
       if (this.hoverTargetEl) this.renderHover();
     });
   };
-
-  // ---- 句柄缩放拖拽（阶段 6a）----
-
-  private onHandleMouseDown = (ev: MouseEvent, dir: HandleDir): void => {
-    ev.preventDefault();
-    ev.stopPropagation();
-    if (!this.selectedEl) return;
-
-    this.dragging = true;
-    this.dragDir = dir;
-    this.dragStartX = ev.clientX;
-    this.dragStartY = ev.clientY;
-
-    const cs = window.getComputedStyle(this.selectedEl);
-    this.origW = parseFloat(cs.width) || 0;
-    this.origH = parseFloat(cs.height) || 0;
-
-    window.addEventListener('mousemove', this.onDragMove, { capture: true });
-    window.addEventListener('mouseup', this.onDragUp, { capture: true });
-  };
-
-  private onDragMove = (ev: MouseEvent): void => {
-    if (!this.dragging || !this.selectedEl || !this.dragDir) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-
-    const dx = ev.clientX - this.dragStartX;
-    const dy = ev.clientY - this.dragStartY;
-
-    const dims = HANDLE_DIMS[this.dragDir];
-
-    if (dims.w) {
-      const newW = Math.max(0, this.origW + (dims.wNeg ? -dx : dx));
-      this.selectedEl.style.width = `${newW}px`;
-    }
-    if (dims.h) {
-      const newH = Math.max(0, this.origH + (dims.hNeg ? -dy : dy));
-      this.selectedEl.style.height = `${newH}px`;
-    }
-
-    // 同步更新 selbox 位置/尺寸
-    this.repositionSelbox();
-  };
-
-  private onDragUp = (ev: MouseEvent): void => {
-    if (!this.dragging || !this.selectedEl || !this.dragDir) return;
-    ev.preventDefault();
-    ev.stopPropagation();
-
-    const el = this.selectedEl;
-    const dir = this.dragDir;
-    const dims = HANDLE_DIMS[dir];
-
-    const cs = window.getComputedStyle(el);
-    const newW = parseFloat(cs.width) || 0;
-    const newH = parseFloat(cs.height) || 0;
-
-    // 构建 StyleChange（有变化才记录）
-    const changes: StyleChange[] = [];
-    if (dims.w && Math.abs(newW - this.origW) > 0.5) {
-      changes.push({
-        prop: 'width',
-        cssProp: 'width',
-        oldValue: `${this.origW}px`,
-        newValue: `${newW}px`,
-      });
-    }
-    if (dims.h && Math.abs(newH - this.origH) > 0.5) {
-      changes.push({
-        prop: 'height',
-        cssProp: 'height',
-        oldValue: `${this.origH}px`,
-        newValue: `${newH}px`,
-      });
-    }
-
-    if (changes.length > 0) {
-      this.commitChanges(el, changes);
-    }
-
-    this.endDrag();
-  };
-
-  private endDrag(): void {
-    this.dragging = false;
-    this.dragDir = null;
-    window.removeEventListener('mousemove', this.onDragMove, true);
-    window.removeEventListener('mouseup', this.onDragUp, true);
-  }
 
   // ---- 本体拖拽移动（阶段 6b）----
 
@@ -574,7 +412,7 @@ export class MoveManager {
       this.renderDropTarget(this.findDropTarget(ev.clientX, ev.clientY));
     }
 
-    this.repositionSelbox();
+    this.selbox.reposition();
   };
 
   private onMoveUp = (ev: MouseEvent): void => {
@@ -926,7 +764,7 @@ export class MoveManager {
     // 执行重父 + 清 transform（元素在容器内自然排布）
     container.insertBefore(el, insertRef);
     el.style.transform = '';
-    this.repositionSelbox();
+    this.selbox.reposition();
 
     const finalDomRect = el.getBoundingClientRect();
     const finalRect = toViewportPos(finalDomRect);
@@ -996,62 +834,5 @@ export class MoveManager {
         },
       });
     }
-  }
-
-  /** 将 StyleChange 并入标注 store + 推入撤销历史（句柄缩放用） */
-  private commitChanges(el: HTMLElement, changes: StyleChange[]): void {
-    const selector = buildSelector(el);
-    const existing = this.store.getBySelector(selector);
-
-    if (existing) {
-      const before = existing;
-      const merged = mergeChanges(before.changes, changes);
-      const after = this.store.update(before.id, { changes: merged });
-      if (after) {
-        const afterSnap = after;
-        this.history.push({
-          label: 'move:resize',
-          apply: () => {
-            applyChangesToEl(this.resolveEl(afterSnap.selector), changes, 'new');
-            this.store.update(afterSnap.id, { changes: afterSnap.changes });
-          },
-          revert: () => {
-            applyChangesToEl(this.resolveEl(afterSnap.selector), changes, 'old');
-            this.store.update(before.id, { changes: before.changes });
-          },
-        });
-      }
-    } else {
-      const rect = el.getBoundingClientRect();
-      const added = this.store.add({
-        selector,
-        elementType: 'container',
-        summary: el.tagName.toLowerCase(),
-        note: '',
-        changes,
-        viewportPos: {
-          x: Math.round(rect.x),
-          y: Math.round(rect.y),
-          w: Math.round(rect.width),
-          h: Math.round(rect.height),
-        },
-      });
-      const addedSnap = added;
-      this.history.push({
-        label: 'move:resize',
-        apply: () => {
-          applyChangesToEl(this.resolveEl(addedSnap.selector), changes, 'new');
-          this.store.restore(addedSnap);
-        },
-        revert: () => {
-          applyChangesToEl(this.resolveEl(addedSnap.selector), changes, 'old');
-          this.store.remove(addedSnap.id);
-        },
-      });
-    }
-  }
-
-  private resolveEl(selector: string): HTMLElement | null {
-    return resolveTarget(selector);
   }
 }

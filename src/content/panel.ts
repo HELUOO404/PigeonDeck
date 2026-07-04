@@ -35,6 +35,7 @@ import {
 import { createAdvancedBox } from './advanced-styles';
 import { closeAllPopovers } from './popover';
 import { SelectionResolver } from './selection';
+import { SelectionBox } from './selection-box';
 import { Toast } from './toast';
 
 /* ---- SVG 图标（Lucide 风格，与 preview parts 07/11/26/35 一致） ---- */
@@ -166,6 +167,12 @@ export class PanelManager {
   private shadowHost: Element;
   private toast: Toast;
   private resolver: SelectionResolver | null = null;
+  /**
+   * 交互式选中框（八向句柄缩放）：批注模式单击元素时随面板一同出现，
+   * 句柄缩放并入该元素标注 + 撤销历史（与移动模式同一 SelectionBox 组件）。
+   * 缩放提交后回调刷新 panelExisting，使随后保存并入同一标注而非新建重复项。
+   */
+  private selbox: SelectionBox;
 
   // 批注面板（一次一个）
   private panelEl: HTMLElement | null = null;
@@ -217,7 +224,8 @@ export class PanelManager {
     panelLayer: HTMLElement,
     settings: Settings,
     history: History,
-    toast: Toast
+    toast: Toast,
+    overlayLayer: HTMLElement
   ) {
     this.controller = controller;
     this.store = store;
@@ -227,6 +235,15 @@ export class PanelManager {
     this.history = history;
     this.toast = toast;
     this.shadowHost = (panelLayer.getRootNode() as ShadowRoot).host;
+
+    // 选中框挂在 overlay 层（与移动模式一致；句柄 pointer-events:auto 可拖，边框穿透）。
+    // 缩放提交后刷新 panelExisting，避免保存时对同元素新建重复标注。
+    this.selbox = new SelectionBox({
+      store,
+      history,
+      overlayLayer,
+      onAfterResize: (el) => this.onSelboxResize(el),
+    });
 
     this.unsubscribeController = controller.subscribe(() => this.syncActive());
     this.syncActive();
@@ -257,6 +274,7 @@ export class PanelManager {
     this.closePanel();
     this.closeMenu();
     for (const id of [...this.cards.keys()]) this.closeCard(id);
+    this.selbox.destroy();
   }
 
   // ---- 模式联动 ----
@@ -285,6 +303,11 @@ export class PanelManager {
     const inPopover = path.some(
       (n) => n instanceof HTMLElement && n.hasAttribute('data-pd-popover')
     );
+    // 选中框句柄内点击不算"面板外部"：句柄在 overlay 层（非 panelEl），是面板会话的
+    // 直接操作件，缩放期间必须保持面板打开。
+    const inSelbox = path.some(
+      (n) => n instanceof HTMLElement && n.classList.contains('pd-selbox')
+    );
 
     // 菜单外点击 → 关菜单
     if (this.menuEl && !path.includes(this.menuEl)) {
@@ -292,7 +315,7 @@ export class PanelManager {
     }
 
     // 面板外点击 → 关面板（放弃未保存内容，回滚本次会话预览）
-    if (this.panelEl && !path.includes(this.panelEl) && !inPopover) {
+    if (this.panelEl && !path.includes(this.panelEl) && !inPopover && !inSelbox) {
       this.closePanel();
     }
 
@@ -574,9 +597,29 @@ export class PanelManager {
     this.panelTarget = target;
     this.panelExisting = existing;
 
+    // 交互式选中框随面板出现（元素目标；区域批注不走 openPanel 故无框）。
+    // 句柄缩放直接改该元素尺寸 → 并入标注 + 撤销历史。
+    if (target instanceof HTMLElement) {
+      this.selbox.select(target);
+    } else {
+      this.selbox.clear();
+    }
+
     this.positionPanel();
     textarea.focus();
   }
+
+  /**
+   * 句柄缩放提交后（SelectionBox 已把 width/height 并入该元素标注 + 撤销历史）：
+   * 若面板正为同一元素打开，刷新 panelExisting 指向刚新建/更新的标注，
+   * 使随后「保存」并入同一条而非对同元素新建重复标注。
+   */
+  private onSelboxResize = (el: HTMLElement): void => {
+    if (this.panelEl && this.panelTarget === el) {
+      const fresh = this.store.getBySelector(buildSelector(el));
+      if (fresh) this.panelExisting = fresh;
+    }
+  };
 
   private positionPanel(): void {
     if (!this.panelEl || !this.panelTarget) return;
@@ -833,6 +876,7 @@ export class PanelManager {
   closePanel(): void {
     if (!this.panelEl) return;
     closeAllPopovers();
+    this.selbox.clear();
     // 未保存 → 回滚本次会话的预览改动
     if (this.session && !this.panelCommitted) {
       this.session.rollback();
