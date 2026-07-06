@@ -153,6 +153,28 @@ function srcSummary(src: string): string {
   }
 }
 
+/**
+ * 组装一条标注的卡片变更摘要行（纯文本，F10 导出图叠加卡片复用）：
+ * 每行 = 「字段标签: 原值 → 新值」，标签/精简值逻辑与 renderCardContent 完全一致
+ * （富文本→纯文本、媒体→摘要、超长截断），供 canvas 逐行绘制。
+ */
+export function composeCardChangeLines(annotation: Annotation): string[] {
+  return annotation.changes.map((change) => {
+    const def = FIELD_DEFS[change.prop];
+    const isHtml = change.cssProp === 'html';
+    const isSrc = change.cssProp === 'src';
+    const label = isHtml
+      ? t('rt_content_change')
+      : isSrc
+        ? t('replace_media_change')
+        : def
+          ? t(def.labelKey)
+          : change.prop;
+    const fmt = (v: string): string => (isHtml ? htmlToText(v) : isSrc ? srcSummary(v) : v);
+    return `${label}: ${truncateValue(fmt(change.oldValue))} → ${truncateValue(fmt(change.newValue))}`;
+  });
+}
+
 /** 打开的卡片记录 */
 interface OpenCard {
   annotation: Annotation;

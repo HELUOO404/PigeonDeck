@@ -10,7 +10,7 @@ import { AnnotationStore, Annotation } from '../state/annotations';
 import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { t } from './i18n';
-import { makeDraggableByHandle } from './panel';
+import { makeDraggableByHandle, composeCardChangeLines } from './panel';
 import { pushEsc } from './esc-stack';
 
 // ============================================================
@@ -144,8 +144,202 @@ export function layoutOverlay(
 }
 
 // ============================================================
-// 运行时辅助（有 DOM/chrome 依赖，不单测）
+// 展开批注卡片布局（阶段 F10，纯函数可单测）
+// 导出图叠加「已展开、互不重叠」的批注卡片：编号徽标 + 类型 + 批注 + 变更摘要。
+// 布局全程用文档坐标；卡片矩形并入 computeCaptureRange 使画布容纳所有卡片。
 // ============================================================
+
+/** 单张卡片要展示的内容（运行时用 t()/FIELD_DEFS 组装，见 composeCard） */
+export interface CardContent {
+  /** 本地化类型标签（"批注"/"批注 + 样式" 等；区域为"区域"），可空 */
+  typeLabel: string;
+  /** 批注文字（已 trim，可空） */
+  note: string;
+  /** 变更摘要原始行（"字段: 原值 → 新值"，未换行），区域为空 */
+  lines: string[];
+}
+
+/** 文本宽度测量函数（运行时注入 canvas measureText；单测注入桩） */
+export type MeasureFn = (text: string, font: string) => number;
+
+/** 卡片布局输入项（文档坐标） */
+export interface CardLayoutItem {
+  number: number;
+  /** 位号圆中心（连线指向它） */
+  anchor: { x: number; y: number };
+  /** 就近放置参考框（元素/区域框，避免卡片盖住本体） */
+  refBox: DocRect;
+  card: CardContent;
+}
+
+/** 布局完成的卡片（文档坐标 + 已换行的可绘制行） */
+export interface LaidOutCard {
+  number: number;
+  rect: DocRect;
+  anchor: { x: number; y: number };
+  /** 徽标右侧类型标签 */
+  header: string;
+  /** 已换行的批注行 */
+  noteLines: string[];
+  /** 已换行的变更摘要行（首行含 "• " 前缀） */
+  changeLines: string[];
+}
+
+/** 卡片最大/最小宽度（px，含内边距） */
+export const CARD_MAX_WIDTH = 244;
+export const CARD_MIN_WIDTH = 116;
+const CARD_PAD = 11;
+/** 徽标行高（含编号圆） */
+const CARD_HEADER_H = 22;
+/** 正文行高 */
+const CARD_LINE_H = 16;
+/** 分区间距（header↔note↔changes） */
+const CARD_SEC_GAP = 7;
+/** 卡片与参考框/彼此的间距 */
+const CARD_GAP = 14;
+/** 编号徽标半径 */
+const CARD_BADGE_R = 8.5;
+
+/** 卡片字体（照搬 pigeonlib .acard 字号；family 与 PIN_FONT 一致） */
+const CARD_HEADER_FONT = '600 12.5px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const CARD_BODY_FONT = '12px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+const CARD_BADGE_FONT = '600 11px -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+
+/** 卡片颜色（design-tokens.css 亮色令牌，截图为页面故用亮色） */
+const CARD_BG = '#faf7f0'; // --csf
+const CARD_BORDER = '#d9d3c4'; // --cbd
+const CARD_TEXT = '#23262e'; // --ctx
+const CARD_TEXT2 = '#6b6b6b'; // --ctx2
+
+/**
+ * 纯函数：把一段文字按像素宽换行为多行。
+ * 拉丁文优先在最后一个空格断行（整词换行）；CJK 等无空格文本逐字断行。
+ * 保留原有换行符（note 可含多段）。measure 由调用方注入（可单测）。
+ */
+export function wrapText(
+  text: string,
+  maxWidth: number,
+  font: string,
+  measure: MeasureFn
+): string[] {
+  const out: string[] = [];
+  for (const para of text.split('\n')) {
+    let cur = '';
+    for (const ch of Array.from(para)) {
+      const test = cur + ch;
+      if (cur !== '' && measure(test, font) > maxWidth) {
+        const lastSpace = cur.lastIndexOf(' ');
+        if (lastSpace > 0 && ch !== ' ') {
+          out.push(cur.slice(0, lastSpace));
+          cur = cur.slice(lastSpace + 1) + ch;
+        } else {
+          out.push(cur);
+          cur = ch === ' ' ? '' : ch;
+        }
+      } else {
+        cur = test;
+      }
+    }
+    out.push(cur);
+  }
+  return out;
+}
+
+/** 卡片高度（layout 与 drawCards 共用同一常量，保证绘制与尺寸一致） */
+function cardHeight(noteLines: string[], changeLines: string[]): number {
+  let h = CARD_PAD + CARD_HEADER_H;
+  if (noteLines.length > 0) h += CARD_SEC_GAP + noteLines.length * CARD_LINE_H;
+  if (changeLines.length > 0) h += CARD_SEC_GAP + changeLines.length * CARD_LINE_H;
+  return h + CARD_PAD;
+}
+
+/** 两矩形是否重叠（含 margin 间距要求） */
+function rectsOverlap(a: DocRect, b: DocRect, margin: number): boolean {
+  return !(
+    a.x + a.w + margin <= b.x ||
+    b.x + b.w + margin <= a.x ||
+    a.y + a.h + margin <= b.y ||
+    b.y + b.h + margin <= a.y
+  );
+}
+
+/**
+ * 纯函数：为每张卡片计算不互相重叠的矩形与连线锚点（文档坐标）。
+ * 算法：① 按内容换行并测量宽高；② 就近放置（右/左空间更大侧，都放不下则下方），
+ * 水平夹紧在 [0, docWidth] 内；③ 与已放卡片重叠则向下推，直到不重叠。
+ * 非完美排布（仅向下推），但保证互不重叠且可读；比例待真机冒烟核对。
+ */
+export function computeCardLayout(
+  items: CardLayoutItem[],
+  docWidth: number,
+  measure: MeasureFn
+): LaidOutCard[] {
+  const result: LaidOutCard[] = [];
+  const maxTextW = CARD_MAX_WIDTH - CARD_PAD * 2;
+
+  for (const item of items) {
+    // ① 换行 + 尺寸
+    const noteLines = item.card.note
+      ? wrapText(item.card.note, maxTextW, CARD_BODY_FONT, measure)
+      : [];
+    const changeLines: string[] = [];
+    for (const raw of item.card.lines) {
+      changeLines.push(...wrapText('• ' + raw, maxTextW, CARD_BODY_FONT, measure));
+    }
+    const headerW = CARD_BADGE_R * 2 + 6 + measure(item.card.typeLabel, CARD_HEADER_FONT);
+    let contentW = headerW;
+    for (const ln of noteLines) contentW = Math.max(contentW, measure(ln, CARD_BODY_FONT));
+    for (const ln of changeLines) contentW = Math.max(contentW, measure(ln, CARD_BODY_FONT));
+    const cardW = Math.min(
+      CARD_MAX_WIDTH,
+      Math.max(CARD_MIN_WIDTH, Math.ceil(contentW) + CARD_PAD * 2)
+    );
+    const cardH = cardHeight(noteLines, changeLines);
+
+    // ② 就近放置：优先空间更大的一侧，都放不下则下方
+    const freeRight = docWidth - (item.refBox.x + item.refBox.w);
+    const freeLeft = item.refBox.x;
+    let x: number;
+    let y = item.refBox.y;
+    if (freeRight >= cardW + CARD_GAP && freeRight >= freeLeft) {
+      x = item.refBox.x + item.refBox.w + CARD_GAP;
+    } else if (freeLeft >= cardW + CARD_GAP) {
+      x = item.refBox.x - CARD_GAP - cardW;
+    } else {
+      x = item.refBox.x;
+      y = item.refBox.y + item.refBox.h + CARD_GAP;
+    }
+    x = Math.max(0, Math.min(x, docWidth - cardW));
+
+    // ③ 消解重叠：向下推（只降不升，必然收敛）
+    let rect: DocRect = { x, y, w: cardW, h: cardH };
+    const guardMax = result.length * 4 + 8;
+    let moved = true;
+    let guard = 0;
+    while (moved && guard < guardMax) {
+      moved = false;
+      for (const placed of result) {
+        if (rectsOverlap(rect, placed.rect, CARD_GAP)) {
+          rect = { ...rect, y: placed.rect.y + placed.rect.h + CARD_GAP };
+          moved = true;
+        }
+      }
+      guard++;
+    }
+
+    result.push({
+      number: item.number,
+      rect,
+      anchor: item.anchor,
+      header: item.card.typeLabel,
+      noteLines,
+      changeLines,
+    });
+  }
+
+  return result;
+}
+
 
 /** 一个待叠加绘制的标注项（运行时收集，含文档坐标） */
 interface OverlayItem {
@@ -155,7 +349,28 @@ interface OverlayItem {
   box: DocRect;
   /** 移动预览幽灵框（最终位置），仅被移动元素存在 */
   ghost?: DocRect;
+  /** 展开卡片内容（F10），note 与 changes 皆空时为 undefined（只画框/位号） */
+  card?: CardContent;
 }
+
+/** 类型标签（本地化）：批注 / 样式 / 移动 组合，或区域（照 format.ts 语义，紧凑版） */
+function cardTypeLabel(a: Annotation): string {
+  if (a.kind === 'region') return t('region_label');
+  const parts: string[] = [];
+  if (a.note.trim()) parts.push(t('card_type_annotation'));
+  if (a.changes.length > 0) parts.push(t('card_type_style'));
+  if (a.move) parts.push(t('card_type_move'));
+  return parts.join(' + ');
+}
+
+/** 组装一条标注的卡片内容；无 note 且无变更行 → undefined（不画卡片） */
+function composeCard(a: Annotation): CardContent | undefined {
+  const note = a.note.trim();
+  const lines = a.kind === 'region' ? [] : composeCardChangeLines(a);
+  if (!note && lines.length === 0) return undefined;
+  return { typeLabel: cardTypeLabel(a), note, lines };
+}
+
 
 /**
  * 收集所有标注的文档坐标叠加项（运行时，有 DOM 访问）。
@@ -168,11 +383,12 @@ function collectOverlayItems(annotations: Annotation[]): OverlayItem[] {
   const items: OverlayItem[] = [];
 
   for (const a of annotations) {
+    const card = composeCard(a);
     // 区域标注：docRect 本身已是文档坐标
     if (a.kind === 'region' && a.region) {
       const r = a.region.docRect;
       if (r.w > 0 && r.h > 0) {
-        items.push({ number: a.number, kind: 'region', box: { x: r.x, y: r.y, w: r.w, h: r.h } });
+        items.push({ number: a.number, kind: 'region', box: { x: r.x, y: r.y, w: r.w, h: r.h }, card });
       }
       continue;
     }
@@ -205,9 +421,9 @@ function collectOverlayItems(annotations: Annotation[]): OverlayItem[] {
         w: finalRect.w,
         h: finalRect.h,
       };
-      items.push({ number: a.number, kind: 'element', box: initialRect, ghost: finalRect });
+      items.push({ number: a.number, kind: 'element', box: initialRect, ghost: finalRect, card });
     } else {
-      items.push({ number: a.number, kind: 'element', box: rect });
+      items.push({ number: a.number, kind: 'element', box: rect, card });
     }
   }
 
@@ -328,6 +544,150 @@ export function drawOverlays(
 
     // 位号圆
     drawPin(ctx, layout.pin, item.number);
+  }
+}
+
+/** OverlayItem → 卡片布局输入项（仅带卡片内容者）；位号圆中心为连线锚点（文档坐标） */
+function buildCardLayoutItems(items: OverlayItem[]): CardLayoutItem[] {
+  const out: CardLayoutItem[] = [];
+  for (const it of items) {
+    if (!it.card) continue;
+    const inset = it.kind === 'region' ? 0 : MARK_INSET;
+    const bx = it.box.x - inset;
+    const by = it.box.y - inset;
+    out.push({
+      number: it.number,
+      anchor: { x: bx - PIN_OFFSET + PIN_DIAMETER / 2, y: by - PIN_OFFSET + PIN_DIAMETER / 2 },
+      refBox: it.box,
+      card: it.card,
+    });
+  }
+  return out;
+}
+
+/** 生成基于离屏 canvas 的文本测量函数（供 computeCardLayout / wrapText 注入） */
+function makeCanvasMeasure(): MeasureFn {
+  const c = document.createElement('canvas');
+  const cx = c.getContext('2d');
+  return (text, font) => {
+    if (!cx) return text.length * 7; // 无 canvas 兜底（估算）
+    cx.font = font;
+    return cx.measureText(text).width;
+  };
+}
+
+/**
+ * 绘制展开的批注卡片（F10）：连线（位号→卡片最近点）+ 圆角面 + 编号徽标 + 类型 + 批注 + 变更行。
+ * 坐标由文档坐标减 range.top 换算到 canvas；颜色/字体照搬 pigeonlib 亮色令牌。
+ */
+export function drawCards(
+  ctx: CanvasRenderingContext2D,
+  cards: LaidOutCard[],
+  range: CaptureRange
+): void {
+  for (const card of cards) {
+    const x = card.rect.x;
+    const y = card.rect.y - range.top;
+    const w = card.rect.w;
+    const h = card.rect.h;
+    const ax = card.anchor.x;
+    const ay = card.anchor.y - range.top;
+
+    // 连线：位号锚点 → 卡片最近点（虚线，先画压卡片下）
+    const nx = Math.max(x, Math.min(ax, x + w));
+    const ny = Math.max(y, Math.min(ay, y + h));
+    ctx.save();
+    ctx.setLineDash([3, 3]);
+    ctx.lineWidth = 1.2;
+    ctx.strokeStyle = GOLD;
+    ctx.beginPath();
+    ctx.moveTo(ax, ay);
+    ctx.lineTo(nx, ny);
+    ctx.stroke();
+    ctx.restore();
+
+    // 卡片面（--csf 底 + 柔和投影）
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, 9);
+    ctx.fillStyle = CARD_BG;
+    ctx.shadowColor = 'rgba(60,46,18,0.18)';
+    ctx.shadowBlur = 9;
+    ctx.shadowOffsetY = 2;
+    ctx.fill();
+    ctx.restore();
+    // 描边（--cbd）
+    ctx.save();
+    roundRectPath(ctx, x, y, w, h, 9);
+    ctx.strokeStyle = CARD_BORDER;
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+
+    // 编号徽标（金圆白字，与位号圆同色系）
+    const badgeCx = x + CARD_PAD + CARD_BADGE_R;
+    const badgeCy = y + CARD_PAD + CARD_BADGE_R;
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(badgeCx, badgeCy, CARD_BADGE_R, 0, Math.PI * 2);
+    ctx.fillStyle = GOLD;
+    ctx.fill();
+    ctx.fillStyle = '#fff';
+    ctx.font = CARD_BADGE_FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(String(card.number), badgeCx, badgeCy);
+    ctx.restore();
+
+    // 类型标签
+    if (card.header) {
+      ctx.save();
+      ctx.fillStyle = CARD_TEXT;
+      ctx.font = CARD_HEADER_FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(card.header, badgeCx + CARD_BADGE_R + 6, badgeCy);
+      ctx.restore();
+    }
+
+    // 正文行
+    let cy = y + CARD_PAD + CARD_HEADER_H;
+    if (card.noteLines.length > 0) {
+      cy += CARD_SEC_GAP;
+      ctx.save();
+      ctx.fillStyle = CARD_TEXT;
+      ctx.font = CARD_BODY_FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      for (const ln of card.noteLines) {
+        ctx.fillText(ln, x + CARD_PAD, cy + CARD_LINE_H / 2);
+        cy += CARD_LINE_H;
+      }
+      ctx.restore();
+    }
+    if (card.changeLines.length > 0) {
+      // 分隔线（有 note 时）
+      if (card.noteLines.length > 0) {
+        ctx.save();
+        ctx.strokeStyle = CARD_BORDER;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x + CARD_PAD, cy + CARD_SEC_GAP / 2);
+        ctx.lineTo(x + w - CARD_PAD, cy + CARD_SEC_GAP / 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+      cy += CARD_SEC_GAP;
+      ctx.save();
+      ctx.fillStyle = CARD_TEXT2;
+      ctx.font = CARD_BODY_FONT;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      for (const ln of card.changeLines) {
+        ctx.fillText(ln, x + CARD_PAD, cy + CARD_LINE_H / 2);
+        cy += CARD_LINE_H;
+      }
+      ctx.restore();
+    }
   }
 }
 
@@ -533,12 +893,16 @@ export class CopyImageManager {
       }
 
       const docWidth = Math.max(document.documentElement.scrollWidth, window.innerWidth);
-      const range = computeCaptureRange(
-        itemsToRects(items),
-        CAPTURE_PADDING,
-        MAX_CAPTURE_HEIGHT,
-        docWidth
-      );
+
+      // F10：展开的批注卡片布局（文档坐标，互不重叠）；卡片矩形并入范围使画布容纳它们
+      const cards = computeCardLayout(buildCardLayoutItems(items), docWidth, makeCanvasMeasure());
+      const rects = itemsToRects(items).concat(cards.map((c) => c.rect));
+      const range = computeCaptureRange(rects, CAPTURE_PADDING, MAX_CAPTURE_HEIGHT, docWidth);
+      if (range.truncated) {
+        console.warn(
+          '[PigeonDeck] capture range hit MAX_CAPTURE_HEIGHT; some annotation cards may be cropped.'
+        );
+      }
 
       if (range.height === 0) {
         this.toast.show(t('toast_capture_failed'));
@@ -547,10 +911,11 @@ export class CopyImageManager {
 
       const canvas = await captureStitched(range);
 
-      // 叠加绘制：编号/框/区域/移动预览/连线 + 可选水印
+      // 叠加绘制：编号/框/区域/移动预览/连线 + 展开卡片 + 可选水印
       const ctx = canvas.getContext('2d');
       if (ctx) {
         drawOverlays(ctx, items, range);
+        drawCards(ctx, cards, range);
         if (this.settings.watermark) {
           drawWatermark(ctx, range, location.href, formatTimestamp());
         }

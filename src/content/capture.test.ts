@@ -7,13 +7,22 @@ import {
   computeCaptureRange,
   planScreens,
   layoutOverlay,
+  computeCardLayout,
+  wrapText,
   DocRect,
   MAX_CAPTURE_HEIGHT,
   MARK_INSET,
   PIN_OFFSET,
   PIN_DIAMETER,
   CaptureRange,
+  CardLayoutItem,
+  MeasureFn,
+  CARD_MAX_WIDTH,
+  CARD_MIN_WIDTH,
 } from './capture';
+
+/** 测量桩：每字符固定 7px（忽略字体），使换行/尺寸可确定性断言 */
+const measure7: MeasureFn = (text) => Array.from(text).length * 7;
 
 // ============================================================
 // computeCaptureRange
@@ -172,5 +181,133 @@ describe('layoutOverlay', () => {
     const docRect: DocRect = { x: 10, y: 20, w: 40, h: 40 };
     const layout = layoutOverlay(docRect, zeroRange, 0);
     expect(layout.box).toEqual({ x: 10, y: 20, w: 40, h: 40 });
+  });
+});
+
+// ============================================================
+// wrapText（F10 卡片文本换行）
+// ============================================================
+
+describe('wrapText', () => {
+  const FONT = 'body';
+
+  it('短文本不换行', () => {
+    expect(wrapText('hi', 100, FONT, measure7)).toEqual(['hi']);
+  });
+
+  it('拉丁文在空格处整词换行，无行超宽、无前导空格', () => {
+    // maxWidth=70 → 每行 ≤ 10 字符
+    const lines = wrapText('hello world foo bar', 70, FONT, measure7);
+    expect(lines.length).toBeGreaterThan(1);
+    for (const ln of lines) {
+      expect(measure7(ln, FONT)).toBeLessThanOrEqual(70);
+      expect(ln.startsWith(' ')).toBe(false);
+    }
+    // 内容保序还原
+    expect(lines.join(' ')).toBe('hello world foo bar');
+  });
+
+  it('CJK 无空格逐字换行，每行不超宽', () => {
+    const text = '这是一段没有空格的中文文本内容';
+    const lines = wrapText(text, 42, FONT, measure7); // ≤6 字符/行
+    expect(lines.length).toBeGreaterThan(1);
+    for (const ln of lines) {
+      expect(measure7(ln, FONT)).toBeLessThanOrEqual(42);
+    }
+    expect(lines.join('')).toBe(text);
+  });
+
+  it('保留显式换行符', () => {
+    const lines = wrapText('a\nb', 100, FONT, measure7);
+    expect(lines).toEqual(['a', 'b']);
+  });
+});
+
+// ============================================================
+// computeCardLayout（F10 展开卡片非重叠布局）
+// ============================================================
+
+describe('computeCardLayout', () => {
+  const item = (
+    number: number,
+    refBox: DocRect,
+    note: string,
+    lines: string[] = []
+  ): CardLayoutItem => ({
+    number,
+    anchor: { x: refBox.x, y: refBox.y },
+    refBox,
+    card: { typeLabel: 'Annotation', note, lines },
+  });
+
+  it('单卡片：宽度夹在 [MIN, MAX]，高度随内容为正', () => {
+    const cards = computeCardLayout([item(1, { x: 100, y: 100, w: 80, h: 40 }, 'short note')], 1280, measure7);
+    expect(cards).toHaveLength(1);
+    expect(cards[0].rect.w).toBeGreaterThanOrEqual(CARD_MIN_WIDTH);
+    expect(cards[0].rect.w).toBeLessThanOrEqual(CARD_MAX_WIDTH);
+    expect(cards[0].rect.h).toBeGreaterThan(0);
+    // 连线锚点原样保留
+    expect(cards[0].anchor).toEqual({ x: 100, y: 100 });
+  });
+
+  it('内容更多的卡片更高（高度反映内容）', () => {
+    const [small] = computeCardLayout([item(1, { x: 0, y: 0, w: 50, h: 20 }, 'a')], 1280, measure7);
+    const [big] = computeCardLayout(
+      [item(1, { x: 0, y: 0, w: 50, h: 20 }, 'a', ['color: red → blue', 'size: 10 → 20', 'margin: 0 → 8'])],
+      1280,
+      measure7
+    );
+    expect(big.rect.h).toBeGreaterThan(small.rect.h);
+  });
+
+  it('多卡片互不重叠（会重叠的输入被下推分离）', () => {
+    // 三个参考框挤在同一处 → 强制下推堆叠
+    const items = [
+      item(1, { x: 200, y: 100, w: 60, h: 30 }, 'note one'),
+      item(2, { x: 210, y: 110, w: 60, h: 30 }, 'note two'),
+      item(3, { x: 205, y: 105, w: 60, h: 30 }, 'note three'),
+    ];
+    const cards = computeCardLayout(items, 1280, measure7);
+    expect(cards).toHaveLength(3);
+    for (let i = 0; i < cards.length; i++) {
+      for (let j = i + 1; j < cards.length; j++) {
+        const a = cards[i].rect;
+        const b = cards[j].rect;
+        const overlap = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+        expect(overlap).toBe(false);
+      }
+    }
+  });
+
+  it('卡片矩形被 computeCaptureRange 纳入（画布容纳全部卡片）', () => {
+    const items = [
+      item(1, { x: 100, y: 100, w: 60, h: 30 }, 'first'),
+      item(2, { x: 120, y: 120, w: 60, h: 30 }, 'second card with a longer note that wraps'),
+    ];
+    const docWidth = 1280;
+    const cards = computeCardLayout(items, docWidth, measure7);
+    const cardRects = cards.map((c) => c.rect);
+    const range = computeCaptureRange(cardRects, 0, MAX_CAPTURE_HEIGHT, docWidth);
+    const minY = Math.min(...cardRects.map((r) => r.y));
+    const maxY = Math.max(...cardRects.map((r) => r.y + r.h));
+    expect(range.top).toBeLessThanOrEqual(minY);
+    expect(range.top + range.height).toBeGreaterThanOrEqual(maxY);
+    // 所有卡片水平方向也在画布宽内
+    for (const r of cardRects) {
+      expect(r.x).toBeGreaterThanOrEqual(0);
+      expect(r.x + r.w).toBeLessThanOrEqual(docWidth);
+    }
+  });
+
+  it('右侧空间不足时放到左侧，仍夹紧在画布内', () => {
+    // refBox 贴近右边界 → 右侧放不下 cardW，落到左侧
+    const docWidth = 300;
+    const cards = computeCardLayout(
+      [item(1, { x: 250, y: 100, w: 40, h: 30 }, 'note')],
+      docWidth,
+      measure7
+    );
+    expect(cards[0].rect.x).toBeGreaterThanOrEqual(0);
+    expect(cards[0].rect.x + cards[0].rect.w).toBeLessThanOrEqual(docWidth);
   });
 });
