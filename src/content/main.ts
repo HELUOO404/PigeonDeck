@@ -195,6 +195,7 @@ function inject(settings: Settings): void {
     settings,
     toast,
     panelLayer,
+    feedbackLayer,
   });
 
   // 阶段 10：清空确认（贴工具盘确认弹层，确认=复合命令可撤销）

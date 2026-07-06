@@ -1,9 +1,9 @@
 /* ============================================================
    copy-text.ts — 复制文本 UI 接线（阶段 8b）
-   蓝图 §7.1：点「复制文本」→ 生成任务清单 → 立即写剪贴板 + 轻提示
-   → 弹结果窗（可滚动预览 + 语言快切 + 下载 .md + 再复制）。
-   格式化管线全在 format.ts（纯函数），本模块只负责取数据/构造上下文/
-   剪贴板/DOM 弹窗/语言快切。
+   蓝图 §7.1：点「复制文本」→ 生成任务清单 → 弹结果窗（可编辑预览 +
+   语言快切 + 下载 .md + 复制）。F9：不再自动写剪贴板，复制/下载由用户
+   在面板内选择。格式化管线全在 format.ts（纯函数），本模块只负责取数据/
+   构造上下文/剪贴板/DOM 弹窗/语言快切。
    视觉照搬 preview/parts/37-output-text.html（.opanel/.obody/.ofoot）。
    ============================================================ */
 
@@ -13,25 +13,23 @@ import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { getLocale, t } from './i18n';
 import { buildOperations, renderTaskList, PageContext } from './format';
-import { mountPopover, PopoverHandle } from './popover';
+import { PopoverHandle } from './popover';
+import { openDropdown } from './dropdown';
+import { makeDraggableByHandle } from './panel';
 
 /** 结果弹窗宽度（part 37 .opanel） */
 const PANEL_WIDTH = 452;
 const EDGE_MARGIN = 12;
 
-/** 语言快切候选（本阶段仅 en / zh_CN；完整搜索器在阶段 11） */
+/** 渲染语言（仅 en / zh_CN 有模板，其余回退 en） */
 type ExportLang = 'en' | 'zh_CN';
-const LANG_OPTIONS: ReadonlyArray<{ code: ExportLang; name: string }> = [
-  { code: 'en', name: 'English' },
-  { code: 'zh_CN', name: '简体中文' },
-];
 
 /** 语言图标（part 37 .langpick 内联 SVG） */
 const ICON_LANG = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>`;
 const ICON_CHEVRON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
 const ICON_COPY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
-const ICON_CHECK = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
+const ICON_CLOSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
 
 /** 'YYYY-MM-DD HH:mm' 本地时间戳 */
 function formatTimestamp(d = new Date()): string {
@@ -54,7 +52,10 @@ export class CopyTextManager {
 
   // 当前结果弹窗（一次一个）
   private panelEl: HTMLElement | null = null;
+  private bodyEl: HTMLElement | null = null;
   private currentText = '';
+  /** 导出语言选择（'en' | 'auto' | 旧存值）；resolveLang 归一为渲染语言 */
+  private currentChoice: string = 'en';
   private currentLang: ExportLang = 'en';
   private langPopover: PopoverHandle | null = null;
   private outsideHandler: ((ev: MouseEvent) => void) | null = null;
@@ -77,7 +78,7 @@ export class CopyTextManager {
     this.controller.setCallbacks({ onCopyText: () => this.run() });
   }
 
-  /** 点「复制文本」瞬时动作 */
+  /** 点「复制文本」瞬时动作：只生成并弹面板，复制/下载由用户在面板内选择（F9） */
   private run(): void {
     const ops = buildOperations(this.store.getAll());
     if (ops.length === 0) {
@@ -86,7 +87,8 @@ export class CopyTextManager {
       return;
     }
 
-    this.currentLang = resolveLang(this.settings.exportLang);
+    this.currentChoice = this.settings.exportLang;
+    this.currentLang = resolveLang(this.currentChoice);
     const ctx: PageContext = {
       url: location.href,
       title: document.title,
@@ -95,9 +97,6 @@ export class CopyTextManager {
       timestamp: formatTimestamp(),
     };
     this.currentText = renderTaskList(ops, ctx, this.currentLang);
-
-    // 剪贴板：在点击手势内同步调用（不 await 到手势外）
-    this.writeClipboard(this.currentText);
 
     this.openPanel();
   }
@@ -122,12 +121,32 @@ export class CopyTextManager {
     panel.style.position = 'absolute';
     panel.style.width = `${PANEL_WIDTH}px`;
 
-    // 正文：可滚动文本预览
+    // 顶栏：标题 + 关闭 X（照设置面板 .shead）
+    const head = document.createElement('div');
+    head.className = 'shead';
+    const title = document.createElement('span');
+    title.className = 't';
+    title.textContent = t('tb_copy_text');
+    head.appendChild(title);
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'pd-iconbtn';
+    closeBtn.setAttribute('data-testid', 'pd-output-close');
+    closeBtn.setAttribute('aria-label', t('panel_cancel'));
+    closeBtn.title = t('panel_cancel');
+    closeBtn.innerHTML = ICON_CLOSE;
+    closeBtn.addEventListener('click', () => this.closePanel());
+    head.appendChild(closeBtn);
+    panel.appendChild(head);
+
+    // 正文：可编辑 + 可滚动文本预览（F25：复制/下载前就地微调，关闭不保留）
     const body = document.createElement('pre');
     body.className = 'obody pd-scroll';
     body.setAttribute('data-testid', 'pd-output-body');
+    body.contentEditable = 'true';
+    body.spellcheck = false;
     body.textContent = this.currentText;
     panel.appendChild(body);
+    this.bodyEl = body;
 
     // 底栏：左语言快切 + 右（下载 + 复制）
     const foot = document.createElement('div');
@@ -140,7 +159,7 @@ export class CopyTextManager {
     langBtn.innerHTML = ICON_LANG;
     const langCur = document.createElement('span');
     langCur.className = 'cur';
-    langCur.textContent = this.langName(this.currentLang);
+    langCur.textContent = this.choiceLabel(this.currentChoice);
     langBtn.appendChild(langCur);
     langBtn.insertAdjacentHTML('beforeend', `<span class="cd">${ICON_CHEVRON}</span>`);
     langBtn.addEventListener('click', () => this.toggleLangMenu(langBtn, langCur, body));
@@ -148,14 +167,6 @@ export class CopyTextManager {
 
     const acts = document.createElement('span');
     acts.className = 'acts';
-
-    // 取消/关闭：无边框文字按钮，置于下载左侧（点击即关闭弹窗）
-    const btnCancel = document.createElement('button');
-    btnCancel.className = 'pd-btn ghost';
-    btnCancel.setAttribute('data-testid', 'pd-copytext-cancel');
-    btnCancel.textContent = t('panel_cancel');
-    btnCancel.addEventListener('click', () => this.closePanel());
-    acts.appendChild(btnCancel);
 
     const btnDownload = document.createElement('button');
     btnDownload.className = 'pd-iconbtn';
@@ -171,7 +182,7 @@ export class CopyTextManager {
     btnCopy.setAttribute('data-testid', 'pd-output-copy');
     btnCopy.innerHTML = ICON_COPY;
     btnCopy.appendChild(document.createTextNode(t('output_copy')));
-    btnCopy.addEventListener('click', () => this.writeClipboard(this.currentText));
+    btnCopy.addEventListener('click', () => this.writeClipboard(this.liveText()));
     acts.appendChild(btnCopy);
 
     foot.appendChild(acts);
@@ -181,7 +192,14 @@ export class CopyTextManager {
     this.panelEl = panel;
 
     this.positionPanel();
+    // 顶栏可拖动整面板（X 按钮/输入类子元素由 makeDraggableByHandle 忽略）
+    makeDraggableByHandle(panel, head);
     this.bindDismiss();
+  }
+
+  /** 当前预览区实时文本（F25：读用户就地编辑后的值，回退渲染值） */
+  private liveText(): string {
+    return this.bodyEl?.textContent ?? this.currentText;
   }
 
   /** 居中放置，视口夹紧 */
@@ -235,58 +253,46 @@ export class CopyTextManager {
       this.panelEl.remove();
       this.panelEl = null;
     }
+    this.bodyEl = null;
   }
 
-  // ---- 语言快切 ----
+  // ---- 语言快切（F11：紧凑 2 项下拉，英文 / 跟随界面） ----
 
-  private langName(code: ExportLang): string {
-    return LANG_OPTIONS.find((o) => o.code === code)?.name ?? code;
+  /** 导出语言选择 code → 展示名（照 settings-panel.exportLangLabel） */
+  private choiceLabel(choice: string): string {
+    if (choice === 'auto') return t('opt_export_auto');
+    if (choice === 'en') return t('opt_export_en');
+    if (choice === 'zh_CN') return t('opt_export_zh');
+    return choice;
   }
 
-  /** 点 langpick → 弹语言浮层（en / zh_CN），选中即重渲正文（不改 settings） */
+  /** 点 langpick → 弹紧凑 2 项下拉（en / auto），选中即重渲正文（不改 settings） */
   private toggleLangMenu(anchor: HTMLElement, curLabel: HTMLElement, body: HTMLElement): void {
     if (this.langPopover) {
       this.langPopover.close();
       this.langPopover = null;
       return;
     }
-
-    const dd = document.createElement('div');
-    dd.className = 'pd-surface langdd';
-    dd.setAttribute('data-testid', 'pd-output-langdd');
-
-    for (const opt of LANG_OPTIONS) {
-      const item = document.createElement('button');
-      item.className = 'langopt' + (opt.code === this.currentLang ? ' on' : '');
-      item.setAttribute('data-testid', `pd-output-lang-${opt.code}`);
-      const iso = document.createElement('span');
-      iso.className = 'iso';
-      iso.textContent = opt.code === 'zh_CN' ? 'zh' : 'en';
-      item.appendChild(iso);
-      const nm = document.createElement('span');
-      nm.className = 'nm';
-      nm.textContent = opt.name;
-      item.appendChild(nm);
-      if (opt.code === this.currentLang) {
-        item.insertAdjacentHTML('beforeend', `<span class="chk">${ICON_CHECK}</span>`);
-      }
-      item.addEventListener('click', () => {
-        this.setLang(opt.code, curLabel, body);
-        this.langPopover?.close();
+    this.langPopover = openDropdown({
+      root: this.root,
+      anchor,
+      plain: true,
+      current: this.currentChoice,
+      items: [
+        { value: 'en', label: t('opt_export_en') },
+        { value: 'auto', label: t('opt_export_auto') },
+      ],
+      onPick: (choice) => this.setChoice(choice, curLabel, body),
+      onClose: () => {
         this.langPopover = null;
-      });
-      dd.appendChild(item);
-    }
-
-    this.langPopover = mountPopover(this.root, dd, anchor, () => {
-      this.langPopover = null;
+      },
     });
   }
 
-  /** 切换渲染语言（局部状态，不写 settings）→ 用新语言重渲正文并同步剪贴板 */
-  private setLang(lang: ExportLang, curLabel: HTMLElement, body: HTMLElement): void {
-    if (lang === this.currentLang) return;
-    this.currentLang = lang;
+  /** 切换导出语言选择（局部状态，不写 settings）→ 归一渲染语言、重渲正文 */
+  private setChoice(choice: string, curLabel: HTMLElement, body: HTMLElement): void {
+    this.currentChoice = choice;
+    this.currentLang = resolveLang(choice);
     const ops = buildOperations(this.store.getAll());
     const ctx: PageContext = {
       url: location.href,
@@ -295,15 +301,15 @@ export class CopyTextManager {
       viewportH: window.innerHeight,
       timestamp: formatTimestamp(),
     };
-    this.currentText = renderTaskList(ops, ctx, lang);
+    this.currentText = renderTaskList(ops, ctx, this.currentLang);
     body.textContent = this.currentText;
-    curLabel.textContent = this.langName(lang);
+    curLabel.textContent = this.choiceLabel(choice);
   }
 
   // ---- 下载 ----
 
   private download(): void {
-    const blob = new Blob([this.currentText], { type: 'text/markdown' });
+    const blob = new Blob([this.liveText()], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

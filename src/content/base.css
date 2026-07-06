@@ -396,6 +396,9 @@
   color: var(--ctx);
   white-space: pre-wrap;
   word-break: break-word;
+  /* F25：可编辑预览（contentEditable）——去掉整块聚焦描边，插入符指示焦点 */
+  outline: none;
+  cursor: text;
 }
 .ofoot {
   display: flex;
@@ -425,35 +428,6 @@
 .langpick .cd { display: inline-flex; margin-left: 1px; }
 .ofoot .acts { display: inline-flex; align-items: center; gap: 8px; }
 .ofoot .pd-btn { min-height: 30px; }
-
-/* 语言快切浮层（part 39 精简版：仅 en / zh_CN） */
-.langdd { padding: 6px; min-width: 168px; display: flex; flex-direction: column; gap: 1px; }
-.langopt {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 12px;
-  border: 0;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ctx);
-  font: 13px var(--font-ui);
-  cursor: pointer;
-  text-align: left;
-}
-.langopt:hover { background: var(--chv); }
-.langopt.on { background: var(--c1-soft); }
-.langopt .iso {
-  width: 24px;
-  flex: none;
-  font: 600 10px var(--font-ui);
-  letter-spacing: .5px;
-  text-transform: uppercase;
-  color: var(--ctx2);
-}
-.langopt .nm { flex: 1; }
-.langopt .chk { margin-left: auto; color: var(--c1); display: inline-flex; }
-.langopt .chk svg { width: 15px; height: 15px; }
 
 /* ============================================================
    搜索式语言选择器浮层（parts 29 界面语言 / 39 导出语言）
@@ -1570,9 +1544,9 @@
 /* ============================================================
    阶段 9a：复制图片结果弹窗
    来源：preview/parts/38-output-image.html（.shot-wrap/.shot/.ofoot 照搬）
-   .opanel-img 覆盖宽度；.ofoot-end 让底栏右对齐（图片面板无左侧语言快切）
+   .opanel-img 宽度与复制文本面板一致（452）；.ofoot-end 底栏右对齐
    ============================================================ */
-.opanel-img { width: 360px; }
+.opanel-img { width: 452px; }
 .opanel-img .ofoot { justify-content: flex-end; }
 
 /* 图片预览区外框 */
@@ -1587,6 +1561,42 @@
   background: #fbfbfc;
   max-height: 400px;
 }
+
+/* 单击预览 → 全屏灯箱（feedback 层，覆盖视口，click-to-zoom） */
+.pd-lightbox {
+  position: fixed;
+  inset: 0;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: auto;
+  background: rgba(20, 16, 10, 0.82);
+  cursor: zoom-out;
+}
+.pd-lightbox .lb-img {
+  display: block;
+  max-width: 96vw;
+  max-height: 96vh;
+  object-fit: contain;
+  border-radius: 6px;
+  box-shadow: var(--sh-up);
+  cursor: zoom-in;
+}
+/* 放大态：实际尺寸，超出由背景滚动查看 */
+.pd-lightbox.zoomed { align-items: flex-start; justify-content: flex-start; }
+.pd-lightbox.zoomed .lb-img { max-width: none; max-height: none; cursor: zoom-out; }
+/* 在新标签页打开（右上角） */
+.pd-lightbox .lb-open {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 36px;
+  height: 36px;
+  background: rgba(255, 255, 255, 0.9);
+  color: var(--ctx);
+}
+.pd-lightbox .lb-open:hover { background: #fff; }
 
 /* ============================================================
    阶段 10：清空确认弹层

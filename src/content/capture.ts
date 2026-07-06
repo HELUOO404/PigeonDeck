@@ -10,6 +10,8 @@ import { AnnotationStore, Annotation } from '../state/annotations';
 import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { t } from './i18n';
+import { makeDraggableByHandle } from './panel';
+import { pushEsc } from './esc-stack';
 
 // ============================================================
 // 纯函数 + 数据类型（可单测）
@@ -471,8 +473,10 @@ export async function captureStitched(range: CaptureRange): Promise<HTMLCanvasEl
 
 const ICON_DOWNLOAD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>`;
 const ICON_COPY = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="8" y="8" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
+const ICON_CLOSE = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>`;
+const ICON_EXTERNAL = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>`;
 
-const PANEL_WIDTH = 360;
+const PANEL_WIDTH = 452;
 const EDGE_MARGIN = 12;
 /** 截图范围外框留白（px） */
 const CAPTURE_PADDING = 80;
@@ -483,10 +487,13 @@ export class CopyImageManager {
   private settings: Settings;
   private toast: Toast;
   private panelLayer: HTMLElement;
+  private feedbackLayer: HTMLElement;
   private panelEl: HTMLElement | null = null;
   private outsideHandler: ((ev: MouseEvent) => void) | null = null;
   private keyHandler: ((ev: KeyboardEvent) => void) | null = null;
   private currentCanvas: HTMLCanvasElement | null = null;
+  private lightboxEl: HTMLElement | null = null;
+  private lightboxEsc: (() => void) | null = null;
 
   constructor(opts: {
     controller: Controller;
@@ -494,12 +501,14 @@ export class CopyImageManager {
     settings: Settings;
     toast: Toast;
     panelLayer: HTMLElement;
+    feedbackLayer: HTMLElement;
   }) {
     this.controller = opts.controller;
     this.store = opts.store;
     this.settings = opts.settings;
     this.toast = opts.toast;
     this.panelLayer = opts.panelLayer;
+    this.feedbackLayer = opts.feedbackLayer;
 
     // 合并进已有回调（setCallbacks 是 merge 语义，不覆盖其它回调）
     this.controller.setCallbacks({ onCopyImage: () => void this.run() });
@@ -549,21 +558,9 @@ export class CopyImageManager {
 
       this.currentCanvas = canvas;
       this.openPanel(canvas);
-
-      // 按 imageMethod 自动执行一次（弹窗仍展示两键）
-      this.autoExport();
     } catch (err) {
       console.error('[PigeonDeck] captureStitched failed', err);
       this.toast.show(t('toast_capture_failed'));
-    }
-  }
-
-  /** 生成后按设置自动执行剪贴板 / 下载 */
-  private autoExport(): void {
-    if (this.settings.imageMethod === 'download') {
-      this.download();
-    } else {
-      this.copyToClipboard();
     }
   }
 
@@ -579,6 +576,23 @@ export class CopyImageManager {
     panel.style.position = 'absolute';
     panel.style.width = `${PANEL_WIDTH}px`;
 
+    // 顶栏：标题 + 关闭 X（照设置面板 .shead）
+    const head = document.createElement('div');
+    head.className = 'shead';
+    const title = document.createElement('span');
+    title.className = 't';
+    title.textContent = t('tb_copy_image');
+    head.appendChild(title);
+    const closeBtn = document.createElement('button');
+    closeBtn.className = 'pd-iconbtn';
+    closeBtn.setAttribute('data-testid', 'pd-image-close');
+    closeBtn.setAttribute('aria-label', t('panel_cancel'));
+    closeBtn.title = t('panel_cancel');
+    closeBtn.innerHTML = ICON_CLOSE;
+    closeBtn.addEventListener('click', () => this.closePanel());
+    head.appendChild(closeBtn);
+    panel.appendChild(head);
+
     // 图片预览区
     const shotWrap = document.createElement('div');
     shotWrap.className = 'shot-wrap';
@@ -593,22 +607,17 @@ export class CopyImageManager {
     img.style.width = '100%';
     img.style.height = 'auto';
     img.style.display = 'block';
+    img.style.cursor = 'zoom-in';
+    // 单击预览 → 全屏灯箱（放大查看长图）
+    img.addEventListener('click', () => this.openLightbox());
 
     shot.appendChild(img);
     shotWrap.appendChild(shot);
     panel.appendChild(shotWrap);
 
-    // 底栏（9a：下载占位 + 复制占位）
+    // 底栏：下载 + 复制（用户自选，不自动导出）
     const foot = document.createElement('div');
     foot.className = 'ofoot ofoot-end';
-
-    // 取消/关闭：无边框文字按钮，置于下载左侧（点击即关闭弹窗）
-    const btnCancel = document.createElement('button');
-    btnCancel.className = 'pd-btn ghost';
-    btnCancel.setAttribute('data-testid', 'pd-copyimage-cancel');
-    btnCancel.textContent = t('panel_cancel');
-    btnCancel.addEventListener('click', () => this.closePanel());
-    foot.appendChild(btnCancel);
 
     const btnDownload = document.createElement('button');
     btnDownload.className = 'pd-iconbtn';
@@ -633,7 +642,62 @@ export class CopyImageManager {
     this.panelEl = panel;
 
     this.positionPanel();
+    // 顶栏可拖动整面板（X 按钮由 makeDraggableByHandle 忽略）
+    makeDraggableByHandle(panel, head);
     this.bindDismiss();
+  }
+
+  // ---- 单击预览灯箱（feedback 层，覆盖视口，click-to-zoom） ----
+
+  private openLightbox(): void {
+    if (!this.currentCanvas) return;
+    this.closeLightbox();
+
+    const back = document.createElement('div');
+    back.className = 'pd-lightbox';
+    back.setAttribute('data-testid', 'pd-image-lightbox');
+
+    const big = document.createElement('img');
+    big.className = 'lb-img';
+    big.src = this.currentCanvas.toDataURL('image/png');
+    // 单击图片：适配视口 ↔ 实际尺寸切换
+    big.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      back.classList.toggle('zoomed');
+    });
+    back.appendChild(big);
+
+    // 在新标签页打开（blob: URL — Chrome 拦截顶层 data: 导航）
+    const openBtn = document.createElement('button');
+    openBtn.className = 'pd-iconbtn lb-open';
+    openBtn.setAttribute('data-testid', 'pd-image-lightbox-open');
+    openBtn.title = t('output_img_open_tab');
+    openBtn.setAttribute('aria-label', t('output_img_open_tab'));
+    openBtn.innerHTML = ICON_EXTERNAL;
+    openBtn.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      this.currentCanvas?.toBlob((blob) => {
+        if (!blob) return;
+        window.open(URL.createObjectURL(blob), '_blank');
+      }, 'image/png');
+    });
+    back.appendChild(openBtn);
+
+    // 点背景关闭（点图片/按钮已 stopPropagation）
+    back.addEventListener('click', () => this.closeLightbox());
+
+    this.feedbackLayer.appendChild(back);
+    this.lightboxEl = back;
+    this.lightboxEsc = pushEsc(() => this.closeLightbox());
+  }
+
+  private closeLightbox(): void {
+    this.lightboxEsc?.();
+    this.lightboxEsc = null;
+    if (this.lightboxEl) {
+      this.lightboxEl.remove();
+      this.lightboxEl = null;
+    }
   }
 
   private positionPanel(): void {
@@ -651,6 +715,8 @@ export class CopyImageManager {
   private bindDismiss(): void {
     this.outsideHandler = (ev: MouseEvent): void => {
       if (!this.panelEl) return;
+      // 灯箱打开时不处理面板外部点击（灯箱覆盖视口并自管关闭）
+      if (this.lightboxEl) return;
       const path = ev.composedPath();
       if (path.includes(this.panelEl)) return;
       this.closePanel();
@@ -666,6 +732,7 @@ export class CopyImageManager {
   }
 
   private closePanel(): void {
+    this.closeLightbox();
     if (this.outsideHandler) {
       window.removeEventListener('mousedown', this.outsideHandler, true);
       this.outsideHandler = null;
