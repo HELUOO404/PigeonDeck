@@ -193,7 +193,7 @@ export class Toolbar {
     this.updateToolbarDirection();
   }
 
-  /** 检测视口空间，更新工具盘展开方向（Logo 始终贴球锚点）与 tooltip 方向 */
+  /** 检测视口空间，更新工具盘展开方向（Logo 始终贴球锚点） */
   private updateToolbarDirection(): void {
     const el = this.wrapper;
     const tbHeight = this.toolbar.scrollHeight || 320; // 预估高度
@@ -218,12 +218,6 @@ export class Toolbar {
       el.style.bottom = 'auto';
       el.style.top = `${Math.max(0, ballTop)}px`;
     }
-
-    // tooltip 方向：靠近右边缘 → tooltip 在左侧
-    const tbRect = el.getBoundingClientRect();
-    const nearRight = window.innerWidth - tbRect.right < 160;
-    this.toolbar.classList.toggle('tip-left', nearRight);
-    this.toolbar.classList.toggle('tip-right', !nearRight);
   }
 
   // ---- 创建 DOM ----
@@ -234,6 +228,7 @@ export class Toolbar {
     ball.setAttribute('data-testid', 'pd-ball');
     ball.setAttribute('role', 'button');
     ball.setAttribute('aria-label', t('tb_logo'));
+    ball.title = t('tb_logo');
     ball.innerHTML = ICONS.logo;
     ball.style.cursor = 'pointer';
     ball.style.pointerEvents = 'auto';
@@ -250,7 +245,7 @@ export class Toolbar {
 
   private createToolbarEl(): HTMLElement {
     const tb = document.createElement('div');
-    tb.className = 'pd-toolbar tip-right';
+    tb.className = 'pd-toolbar';
     tb.setAttribute('data-testid', 'pd-toolbar');
     // 显隐由 CSS（.pd-wrapper.pd-open）驱动，默认 base.css .pd-toolbar { display:none }
 
@@ -307,13 +302,8 @@ export class Toolbar {
     btn.className = className;
     btn.innerHTML = iconSvg;
     btn.setAttribute('aria-label', t(i18nKey));
-
-    // Tooltip span
-    const tip = document.createElement('span');
-    tip.className = 'pd-tip';
-    tip.textContent = t(i18nKey);
-    btn.appendChild(tip);
-
+    // F3：改用原生系统 tooltip（title），移除不稳定的自制 .pd-tip 浮层。
+    btn.title = t(i18nKey);
     return btn;
   }
 
@@ -326,6 +316,7 @@ export class Toolbar {
     this.btnUndo = document.createElement('button');
     this.btnUndo.setAttribute('data-testid', 'pd-btn-undo');
     this.btnUndo.setAttribute('aria-label', t('tb_undo'));
+    this.btnUndo.title = t('tb_undo');
     this.btnUndo.innerHTML = ICONS.undo;
     this.btnUndo.addEventListener('click', () => {
       if (!this.btnUndo.disabled) this.controller.triggerUndo();
@@ -334,6 +325,7 @@ export class Toolbar {
     this.btnRedo = document.createElement('button');
     this.btnRedo.setAttribute('data-testid', 'pd-btn-redo');
     this.btnRedo.setAttribute('aria-label', t('tb_redo'));
+    this.btnRedo.title = t('tb_redo');
     this.btnRedo.innerHTML = ICONS.redo;
     this.btnRedo.addEventListener('click', () => {
       if (!this.btnRedo.disabled) this.controller.triggerRedo();
@@ -400,6 +392,11 @@ export class Toolbar {
 
     this.pos = clampPos(newRight, newBottom, rect.width, rect.height);
     this.applyPos();
+    // F7：展开态拖拽时按当前展开方向重锚。applyPos 强制底锚，向下展开（顶锚、整条高）时
+    // 会把底部＝设置钮钉在球偏移处 → 整条上跳；重算方向让顶/底锚与展开方向一致，拖动不跳。
+    if (this.controller.getState().expanded) {
+      this.updateToolbarDirection();
+    }
   };
 
   /** 松手/取消：无条件解绑窗口监听并结束拖拽，移动过则持久化并重算展开方向 */

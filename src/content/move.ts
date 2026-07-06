@@ -19,6 +19,7 @@ import { SelectionBox } from './selection-box';
 import { buildSelector, isVisible } from '../shared/dom-utils';
 import { snapDrag, Rect, Guide } from './snap';
 import { pickDropTarget, pickInsertIndex, parseTranslate } from './embed';
+import { pushEsc } from './esc-stack';
 import { t } from './i18n';
 
 /** 吸附阈值（px，蓝图 §4.3） */
@@ -130,6 +131,8 @@ export class MoveManager {
   private rafId: number | null = null;
 
   private active = false;
+  /** 选中期间压入 Esc 栈的弹出函数（F8b：Esc 先取消选中，再由 shortcuts 退出移动模式）。 */
+  private escPop: (() => void) | undefined;
   private unsubscribeController: () => void;
 
   constructor(opts: {
@@ -247,9 +250,14 @@ export class MoveManager {
   private selectElement(el: HTMLElement): void {
     this.clearHover();
     this.selbox.select(el);
+    // F8b：选中期间接管 Esc —— 先取消选中，弹栈后再按一次 Esc 才由 shortcuts 退出移动模式。
+    this.escPop?.();
+    this.escPop = pushEsc(() => this.clearSelection());
   }
 
   private clearSelection(): void {
+    this.escPop?.();
+    this.escPop = undefined;
     this.selbox.clear();
     this.clearHover();
     this.clearDropTarget();

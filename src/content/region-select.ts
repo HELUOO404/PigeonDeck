@@ -10,6 +10,7 @@ import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import { PanelManager } from './panel';
 import { buildSelector, isVisible, findScrollableAncestor } from '../shared/dom-utils';
+import { pushEsc } from './esc-stack';
 import { t } from './i18n';
 
 /** 长按阈值默认值（ms）；实际用 settings.longPressMs（阶段 11 接入） */
@@ -56,6 +57,8 @@ export class RegionSelectManager {
 
   // 区域面板
   private regionPanelEl: HTMLElement | null = null;
+  /** 区域面板打开期间压入 Esc 栈的弹出函数（F8b：Esc 取消这次区域批注）。 */
+  private escPop: (() => void) | undefined;
 
   private unsubscribeController: () => void;
   private active = false;
@@ -374,6 +377,10 @@ export class RegionSelectManager {
       this.closeRegionPanel();
     };
     window.addEventListener('mousedown', onOutside, true);
+
+    // F8b：区域面板打开期间接管 Esc —— 取消这次区域批注（语义同点外部/删除）。
+    this.escPop?.();
+    this.escPop = pushEsc(() => this.closeRegionPanel());
   }
 
   private positionRegionPanel(vpRect: { x: number; y: number; w: number; h: number }): void {
@@ -417,6 +424,8 @@ export class RegionSelectManager {
   }
 
   closeRegionPanel(): void {
+    this.escPop?.();
+    this.escPop = undefined;
     if (this.regionPanelEl) {
       this.regionPanelEl.remove();
       this.regionPanelEl = null;

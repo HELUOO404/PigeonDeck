@@ -131,13 +131,15 @@ function inject(settings: Settings): void {
     onPinClick?: (a: Annotation) => void;
     onPinContextMenu?: (a: Annotation, pinEl: HTMLElement) => void;
   } = {};
-  const overlay = new Overlay(controller, store, overlayLayer, feedbackLayer, settings, {
+  const overlay = new Overlay(controller, store, overlayLayer, settings, {
     onPinClick: (a) => hooks.onPinClick?.(a),
     onPinContextMenu: (a, pinEl) => hooks.onPinContextMenu?.(a, pinEl),
   });
   const panelManager = new PanelManager(controller, store, overlay, panelLayer, settings, history, toast, overlayLayer);
   hooks.onPinClick = panelManager.togglePinCard;
   hooks.onPinContextMenu = panelManager.openPinMenu;
+  // F6：hover 跳过批注模式已选中的元素（Overlay 在页面 hover 时查询它）
+  overlay.setSelectedGetter(() => panelManager.getSelectedTarget());
 
   // 阶段 4a：直接编辑（双击文本元素 → 内联编辑 + 富文本浮条）
   new DirectEditManager({

@@ -34,6 +34,7 @@ import {
 } from './fields';
 import { createAdvancedBox } from './advanced-styles';
 import { closeAllPopovers } from './popover';
+import { pushEsc } from './esc-stack';
 import { SelectionResolver } from './selection';
 import { SelectionBox } from './selection-box';
 import { Toast } from './toast';
@@ -216,6 +217,8 @@ export class PanelManager {
   private active = false;
   // 挂起全页事件拦截（打开原生取色器等系统级浮层期间）：capture 段一律放行，见 suspendInterception。
   private suspended = false;
+  /** 面板打开期间压入 Esc 栈的弹出函数（F8b：Esc 先取消选中/关面板，再由 shortcuts 退出模式）。 */
+  private escPop: (() => void) | undefined;
   private unsubscribeStore: () => void;
   private unsubscribeController: () => void;
 
@@ -437,6 +440,11 @@ export class PanelManager {
     this.resolver = resolver;
   }
 
+  /** 批注模式当前选中元素（Overlay F6 用：hover 命中它时跳过高亮）。无选中返回 null。 */
+  getSelectedTarget(): Element | null {
+    return this.panelTarget;
+  }
+
   /** 取消待定的单击延迟（dblclick 触发直接编辑时调用） */
   cancelPendingOpen(): void {
     if (this.pendingOpenTimer !== null) {
@@ -627,6 +635,11 @@ export class PanelManager {
 
     this.positionPanel();
     textarea.focus();
+
+    // F8b：面板打开期间接管 Esc —— 先取消选中（关面板 + 清八句柄框，语义同点外部），
+    // 弹栈后再按一次 Esc 才轮到 shortcuts 退出模式。
+    this.escPop?.();
+    this.escPop = pushEsc(() => this.closePanel());
   }
 
   /**
@@ -895,6 +908,8 @@ export class PanelManager {
 
   closePanel(): void {
     if (!this.panelEl) return;
+    this.escPop?.();
+    this.escPop = undefined;
     closeAllPopovers();
     this.selbox.clear();
     // 未保存 → 回滚本次会话的预览改动

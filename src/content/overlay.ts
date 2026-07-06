@@ -38,10 +38,12 @@ const LABEL_OFFSET_Y = 26;
 export class Overlay {
   private controller: Controller;
   private root: HTMLElement; // overlay 层根容器
-  private feedbackRoot: HTMLElement; // feedback 层（hover 高亮/标签渲染于此，压在面板/工具盘之上）
   private settings: Settings;
   private hooks: OverlayHooks;
   private shadowHost: Element;
+  /** 批注模式当前选中元素取值器（main.ts 注入 PanelManager.getSelectedTarget）：
+      hover 命中已选元素时跳过高亮，避免与选中框/八句柄重叠（F6，对齐移动模式）。 */
+  private getSelected: (() => Element | null) | null = null;
 
   // hover UI
   private hoverBox: HTMLElement;
@@ -63,31 +65,30 @@ export class Overlay {
     controller: Controller,
     store: AnnotationStore,
     overlayLayer: HTMLElement,
-    feedbackLayer: HTMLElement,
     settings: Settings,
     hooks: OverlayHooks = {}
   ) {
     this.controller = controller;
     this.root = overlayLayer;
-    this.feedbackRoot = feedbackLayer;
     this.settings = settings;
     this.hooks = hooks;
     this.shadowHost = (overlayLayer.getRootNode() as ShadowRoot).host;
 
     // hover UI（常驻 DOM，display 切换）
-    // 渲染进 feedback 层（z-5）：确保 hover 高亮/标签压在面板（z-3）与工具盘（z-4）之上，
-    // 始终可见；pointer-events:none 保证不拦截交互。
+    // 渲染进 overlay 层（z-2）：位于面板（z-3）与工具盘（z-4）之下，故 hover 高亮/标签
+    // 不再遮挡工具盘/面板（F5）；仍高于页面内容，正常页面元素上照常可见。
+    // pointer-events:none 保证不拦截交互。
     this.hoverBox = document.createElement('div');
     this.hoverBox.className = 'pd-hover';
     this.hoverBox.setAttribute('data-testid', 'pd-hover');
     this.hoverBox.style.display = 'none';
-    this.feedbackRoot.appendChild(this.hoverBox);
+    this.root.appendChild(this.hoverBox);
 
     this.hoverLabel = document.createElement('div');
     this.hoverLabel.className = 'pd-hlabel';
     this.hoverLabel.setAttribute('data-testid', 'pd-hlabel');
     this.hoverLabel.style.display = 'none';
-    this.feedbackRoot.appendChild(this.hoverLabel);
+    this.root.appendChild(this.hoverLabel);
 
     // 订阅数据 → 同步标注 UI
     this.unsubscribeStore = store.subscribe((annotations) => this.syncMarks(annotations));
@@ -146,6 +147,11 @@ export class Overlay {
   updateSettings(settings: Settings): void {
     this.settings = settings;
     if (!settings.hoverLabel) this.hoverLabel.style.display = 'none';
+  }
+
+  /** 注入「批注模式当前选中元素」取值器（main.ts 在 PanelManager 建好后调用，F6）。 */
+  setSelectedGetter(getter: () => Element | null): void {
+    this.getSelected = getter;
   }
 
   /** 未能定位目标元素的标注数（恢复后轻提示用）；区域标注始终可定位，不计入 */
@@ -263,6 +269,13 @@ export class Overlay {
       target === document.documentElement ||
       target === document.body
     ) {
+      this.clearHover();
+      return;
+    }
+
+    // F6：hover 命中批注模式已选中的元素时不再画高亮框（已有选中框 + 八句柄），
+    // 与移动模式一致（move.ts：resolved === selectedEl → clearHover）。
+    if (this.getSelected && this.getSelected() === target) {
       this.clearHover();
       return;
     }

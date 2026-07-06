@@ -118,34 +118,21 @@ test('② click to expand shows 7 items, click Logo to collapse', async () => {
   await page.close();
 });
 
-test('③ hover shows tooltip', async () => {
+test('③ toolbar buttons expose native title tooltip', async () => {
   const page = await openFixturePage();
 
   // Expand
   await clickShadowEl(page, 'pd-ball');
   await page.waitForTimeout(200);
 
-  // Hover Move button
-  const rect = await getShadowElementRect(page, 'pd-btn-move');
-  expect(rect).not.toBeNull();
-  await page.mouse.move(rect!.x + rect!.width / 2, rect!.y + rect!.height / 2);
-  // 抖动 1px 确保 hover 事件在动画后仍然触发
-  await page.mouse.move(rect!.x + rect!.width / 2 + 1, rect!.y + rect!.height / 2);
-
-  // Tooltip visible (opacity > 0.5) — 轮询等待，避免对过渡时长的固定假设
-  await page.waitForFunction(
-    () => {
-      const host = document.getElementById('pd-host');
-      if (!host?.shadowRoot) return false;
-      const btn = host.shadowRoot.querySelector('[data-testid="pd-btn-move"]');
-      if (!btn) return false;
-      const tip = btn.querySelector('.pd-tip') as HTMLElement | null;
-      if (!tip) return false;
-      return parseFloat(getComputedStyle(tip).opacity) > 0.5;
-    },
-    undefined,
-    { timeout: 3000 }
-  );
+  // F3：改用原生系统 tooltip（title 属性），断言其存在且非空
+  const title = await page.evaluate(() => {
+    const host = document.getElementById('pd-host');
+    if (!host?.shadowRoot) return null;
+    const btn = host.shadowRoot.querySelector('[data-testid="pd-btn-move"]');
+    return btn?.getAttribute('title') ?? null;
+  });
+  expect(title).toBeTruthy();
 
   await page.close();
 });

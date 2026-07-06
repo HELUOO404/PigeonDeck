@@ -170,6 +170,12 @@
   transform: scale(1.12);
 }
 
+/* F8a：抑制键盘（Esc 等）触发的 :focus-visible 黑色 UA 轮廓（不动选中/编辑金边轮廓） */
+.pd-tbtn:focus-visible,
+.pd-undoredo button:focus-visible {
+  outline: none;
+}
+
 /* Logo 按钮：金底浅羽，42px */
 .pd-tbtn.brand {
   width: 42px;
@@ -200,7 +206,7 @@
 .pd-tbtn.disabled,
 .pd-undoredo button.disabled {
   opacity: 0.4;
-  cursor: not-allowed;
+  cursor: default;
 }
 
 /* ---- 合并撤销/重做（左撤销 右重做；建议1：去药丸外壳，仅保留 42×23 布局盒） ---- */
@@ -243,83 +249,7 @@
 
 .pd-undoredo button:disabled {
   opacity: 0.4;
-  cursor: not-allowed;
-}
-
-/* ---- Tooltip ---- */
-/*
-  默认：tooltip 在按钮右侧（.pd-toolbar.tip-right）
-  翻转：靠近视口右边缘时，tooltip 在左侧（.pd-toolbar.tip-left）
-*/
-.pd-tip {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  white-space: nowrap;
-  padding: 5px 9px;
-  border-radius: 7px;
-  background: var(--ctx);
-  color: var(--csf);
-  font: 500 12px var(--font-ui);
-  box-shadow: var(--sh);
-  pointer-events: none;
-  /* 默认隐藏，hover 显示 */
-  opacity: 0;
-  transition: opacity var(--t-fast) var(--ease);
-  z-index: 1;
-}
-
-/* 右侧 tooltip：左边加箭头 */
-.pd-toolbar.tip-right .pd-tip {
-  left: calc(100% + 10px);
-}
-
-.pd-toolbar.tip-right .pd-tip::before {
-  content: "";
-  position: absolute;
-  right: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-right-color: var(--ctx);
-}
-
-/* 左侧 tooltip：右边加箭头 */
-.pd-toolbar.tip-left .pd-tip {
-  right: calc(100% + 10px);
-  left: auto;
-}
-
-.pd-toolbar.tip-left .pd-tip::before {
-  content: "";
-  position: absolute;
-  left: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-left-color: var(--ctx);
-}
-
-/* 悬浮球的 tooltip（始终在左侧） */
-.pd-ball .pd-tip {
-  right: calc(100% + 10px);
-  left: auto;
-}
-
-.pd-ball .pd-tip::before {
-  content: "";
-  position: absolute;
-  left: 100%;
-  top: 50%;
-  transform: translateY(-50%);
-  border: 5px solid transparent;
-  border-left-color: var(--ctx);
-}
-
-/* hover 触发显示 tooltip */
-.pd-tbtn:hover .pd-tip,
-.pd-ball:hover .pd-tip {
-  opacity: 1;
+  cursor: default;
 }
 
 /* ============================================================
