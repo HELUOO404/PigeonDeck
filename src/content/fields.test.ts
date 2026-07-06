@@ -4,7 +4,7 @@
    修改记录合并 / 未保存回滚
    ============================================================ */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   FIELD_DEFS,
   FIELD_CATEGORY,
@@ -294,5 +294,47 @@ describe('shadow — 阴影档位与无阴影识别', () => {
     document.body.appendChild(el);
     el.style.boxShadow = 'rgba(0, 0, 0, 0.2) 0px 4px 10px 0px';
     expect(FIELD_DEFS.shadow.read(el)).toBe('');
+  });
+});
+
+describe('color — 取色器（F18）', () => {
+  it('无 EyeDropper API 时移除取色按钮（优雅降级）', () => {
+    // jsdom 默认无 window.EyeDropper
+    expect('EyeDropper' in window).toBe(false);
+    const box = createControl(new FieldsSession(target), 'color', ctx);
+    expect(box.querySelector('.eye')).toBeNull();
+    expect(box.querySelector('.sw')).toBeTruthy(); // 色块仍在
+  });
+
+  it('取色前挂起页面拦截、promise 落定后恢复，并写入拾取色', async () => {
+    let resumed = false;
+    const suspend = (): (() => void) => () => {
+      resumed = true;
+    };
+    const suspendSpy = vi.fn(suspend);
+    const eyeCtx: ControlContext = { popoverRoot: ctx.popoverRoot, suspendInterception: suspendSpy };
+
+    (window as unknown as { EyeDropper: unknown }).EyeDropper = class {
+      open(): Promise<{ sRGBHex: string }> {
+        return Promise.resolve({ sRGBHex: '#abcdef' });
+      }
+    };
+    try {
+      const session = new FieldsSession(target);
+      const box = createControl(session, 'color', eyeCtx);
+      const eye = box.querySelector<HTMLButtonElement>('.eye')!;
+      expect(eye).toBeTruthy();
+
+      eye.click();
+      expect(suspendSpy).toHaveBeenCalledTimes(1); // 打开前已挂起
+      expect(resumed).toBe(false);
+
+      await new Promise((r) => setTimeout(r, 0)); // 冲刷 open() 的 then/catch/finally 微任务链
+
+      expect(resumed).toBe(true); // 落定后恢复拦截
+      expect(session.get('color')).toBe('#abcdef');
+    } finally {
+      delete (window as unknown as { EyeDropper?: unknown }).EyeDropper;
+    }
   });
 });

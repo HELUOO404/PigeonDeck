@@ -214,6 +214,8 @@ export class PanelManager {
   private suppressClick = false;
 
   private active = false;
+  // 挂起全页事件拦截（打开原生取色器等系统级浮层期间）：capture 段一律放行，见 suspendInterception。
+  private suspended = false;
   private unsubscribeStore: () => void;
   private unsubscribeController: () => void;
 
@@ -298,6 +300,7 @@ export class PanelManager {
   }
 
   private onMouseDown = (ev: MouseEvent): void => {
+    if (this.suspended) return; // 取色器等系统浮层期间不干预页面事件（F18）
     const path = ev.composedPath();
     // 浮层（下拉/调色盘）内点击不算"面板外部"（浮层自身管理关闭）
     const inPopover = path.some(
@@ -330,6 +333,7 @@ export class PanelManager {
   };
 
   private onClick = (ev: MouseEvent): void => {
+    if (this.suspended) return; // 取色器等系统浮层期间不干预页面事件（F18）
     if (!this.active || this.isOwnUi(ev)) return;
 
     // 区域框选松手后抑制该次 click，避免误开元素面板
@@ -381,6 +385,7 @@ export class PanelManager {
    *   让位号圆的右键菜单照常弹出（overlay.ts 中 pin 自带 preventDefault）。
    */
   private onContextMenu = (ev: MouseEvent): void => {
+    if (this.suspended) return; // 取色器等系统浮层期间不干预页面事件（F18）
     if (!this.active) return;
     if (this.isOwnUi(ev)) return;
     // 空白/页面元素右键：抑制原生菜单，等效"点外部"关闭当前面板/菜单
@@ -446,6 +451,18 @@ export class PanelManager {
     this.suppressClick = true;
   }
 
+  /**
+   * 挂起批注模式的全页事件拦截（打开原生取色器等系统级浮层前调用），返回恢复函数。
+   * 挂起期间 capture 段 mousedown/click/contextmenu 全部放行，避免用户在页面上拾取像素的点击被
+   * preventDefault/stopPropagation 吞掉导致取色器悬挂、页面看似卡死（F18）。
+   */
+  private suspendInterception(): () => void {
+    this.suspended = true;
+    return () => {
+      this.suspended = false;
+    };
+  }
+
   /** 内联编辑豁免：DirectEditManager 进入/退出编辑时设置 */
   setInlineEditActive(el: HTMLElement | null): void {
     this.inlineEditEl = el;
@@ -505,7 +522,10 @@ export class PanelManager {
     if (target instanceof HTMLElement) {
       this.session = new FieldsSession(target);
       this.panelCommitted = false;
-      const ctx: ControlContext = { popoverRoot: this.root };
+      const ctx: ControlContext = {
+        popoverRoot: this.root,
+        suspendInterception: () => this.suspendInterception(),
+      };
       // 建议7：修改栏卡片可隐藏（settings.showModbar=false）→ 仅保留说明 + 高级样式
       const modbox = this.settings.showModbar
         ? this.buildModbox(target, elementType, ctx)

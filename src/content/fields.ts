@@ -707,6 +707,11 @@ export class FieldsSession {
 export interface ControlContext {
   /** 浮层挂载容器（panel 层根，下拉/调色盘用） */
   popoverRoot: HTMLElement;
+  /**
+   * 打开原生取色器等系统级浮层前挂起批注模式的全页事件拦截，返回恢复函数。
+   * 未提供时控件仍可用，只是不挂起（测试/无拦截宿主）。
+   */
+  suspendInterception?: () => () => void;
 }
 
 function stepAdjust(session: FieldsSession, key: string, def: FieldDef, dir: 1 | -1): void {
@@ -810,20 +815,30 @@ function buildColor(session: FieldsSession, key: string, ctx: ControlContext): H
     }
     session.set(key, formatCssColor(parsed));
   });
-  eye.addEventListener('click', () => {
-    interface EyeDropperResult {
-      sRGBHex: string;
-    }
-    const EyeDropperCtor = (window as unknown as { EyeDropper?: new () => { open(): Promise<EyeDropperResult> } })
-      .EyeDropper;
-    if (!EyeDropperCtor) return;
-    new EyeDropperCtor()
-      .open()
-      .then((result) => session.set(key, result.sRGBHex))
-      .catch(() => {
-        /* 用户取消 */
-      });
-  });
+  // 原生取色器（EyeDropper API）。Firefox / 旧内核无此 API → 移除取色按钮（优雅降级，不留死按钮）。
+  interface EyeDropperResult {
+    sRGBHex: string;
+  }
+  const EyeDropperCtor = (
+    window as unknown as { EyeDropper?: new () => { open(): Promise<EyeDropperResult> } }
+  ).EyeDropper;
+  if (!EyeDropperCtor) {
+    eye.remove();
+  } else {
+    eye.addEventListener('click', () => {
+      // F18：打开取色器前挂起批注模式的全页事件拦截。否则用户在页面上拾取像素的那次点击会被
+      // panel 的 capture 段 preventDefault/stopPropagation 吞掉，取色器悬挂不返回、页面看似卡死。
+      // promise 落定后（拾取/取消/异常）无条件恢复拦截。
+      const resume = ctx.suspendInterception?.();
+      new EyeDropperCtor()
+        .open()
+        .then((result) => session.set(key, result.sRGBHex))
+        .catch(() => {
+          /* 用户取消 */
+        })
+        .finally(() => resume?.());
+    });
+  }
   session.subscribe(key, render);
   return box;
 }
