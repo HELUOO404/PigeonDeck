@@ -1632,11 +1632,13 @@
 .spanel { display: flex; flex-direction: column; overflow: hidden;
           transition: height var(--t-mid) var(--ease); }
 .shead { display: flex; align-items: center; justify-content: space-between;
-         padding: 10px 9px 10px 14px; border-bottom: 1px solid var(--cbd); }
+         padding: 10px 9px 10px 14px; border-bottom: 1px solid var(--cbd); cursor: move; }
 .shead .t { font-family: var(--font-serif); font-weight: 600; font-size: 15px; color: var(--ctx); }
-.sbody { display: flex; gap: 12px; padding: 10px 14px 12px 8px; }
+.sbody { display: flex; gap: 12px; padding: 10px 8px 12px 8px; }
 .sbody .pd-nav { width: 42px; }
-.sbody .scon { max-height: 300px; overflow: auto; }
+/* F2：固定滚动区高度 → 各分区面板总高一致（切「交互」不再突然变高；短分区不填满、长分区滚动）
+   F15：右内边距 → 滚动条与设置行右缘间留出间隙，与面板右缘侧的间隙对称 */
+.sbody .scon { height: 300px; overflow: auto; padding-right: 8px; }
 .scat { font: 600 11px var(--font-ui); letter-spacing: .6px; text-transform: uppercase;
         color: var(--ctx2); margin: 1px 0 4px; }
 /* 设置行内数值控件统一宽度（防文本截断） */
