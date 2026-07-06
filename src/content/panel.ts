@@ -12,7 +12,14 @@
    ============================================================ */
 
 import { Controller } from './controller';
-import { AnnotationStore, Annotation, StyleChange, mergeChanges } from '../state/annotations';
+import {
+  AnnotationStore,
+  Annotation,
+  StyleChange,
+  mergeChanges,
+  RICHTEXT_DOM_CSSPROP,
+  RichTextDomSnapshot,
+} from '../state/annotations';
 import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import { Overlay } from './overlay';
@@ -106,12 +113,19 @@ function metaText(number: number, elementType: string, x: number, y: number, isR
 /**
  * 按修改记录把元素样式切到旧值/新值（撤销/重做/删除回退用）。
  * oldValue 是打开面板时的 computed/inline 值，写成 inline 视觉等价。
+ * 富文本 DOM 还原载体（cssProp==='richtext'）压轴应用：它整段还原 innerHTML +
+ * editEl 自身 text-align，会覆盖 text/内联样式，故须在其余修改之后执行（F21）。
  */
 export function applyChangesTo(target: Element | null, changes: StyleChange[], dir: 'old' | 'new'): void {
   if (!(target instanceof Element)) return;
   // SVGElement 与 HTMLElement 同样具备 .style/.textContent/.setAttribute（F19），故按 HTMLElement 处理。
   const el = target as HTMLElement;
+  const deferred: StyleChange[] = [];
   for (const c of changes) {
+    if (c.cssProp === RICHTEXT_DOM_CSSPROP) {
+      deferred.push(c);
+      continue;
+    }
     const value = dir === 'old' ? c.oldValue : c.newValue;
     if (c.cssProp === 'text') {
       el.textContent = value;
@@ -121,6 +135,16 @@ export function applyChangesTo(target: Element | null, changes: StyleChange[], d
       el.setAttribute('src', value);
     } else {
       el.style.setProperty(c.cssProp, value);
+    }
+  }
+  for (const c of deferred) {
+    const value = dir === 'old' ? c.oldValue : c.newValue;
+    try {
+      const snap = JSON.parse(value) as RichTextDomSnapshot;
+      el.innerHTML = snap.html;
+      el.style.textAlign = snap.textAlign;
+    } catch {
+      // 损坏快照静默跳过（不乱改页面）
     }
   }
 }
@@ -157,22 +181,32 @@ function srcSummary(src: string): string {
  * 组装一条标注的卡片变更摘要行（纯文本，F10 导出图叠加卡片复用）：
  * 每行 = 「字段标签: 原值 → 新值」，标签/精简值逻辑与 renderCardContent 完全一致
  * （富文本→纯文本、媒体→摘要、超长截断），供 canvas 逐行绘制。
+ * F21：跳过富文本 DOM 还原载体（cssProp==='richtext'，非展示项）；
+ * 富文本格式修改改由 annotation.richText[] 的预生成 summary 逐行呈现。
  */
 export function composeCardChangeLines(annotation: Annotation): string[] {
-  return annotation.changes.map((change) => {
+  const lines: string[] = [];
+  for (const change of annotation.changes) {
+    if (change.cssProp === RICHTEXT_DOM_CSSPROP) continue;
     const def = FIELD_DEFS[change.prop];
     const isHtml = change.cssProp === 'html';
+    const isText = change.cssProp === 'text';
     const isSrc = change.cssProp === 'src';
-    const label = isHtml
-      ? t('rt_content_change')
-      : isSrc
-        ? t('replace_media_change')
-        : def
-          ? t(def.labelKey)
-          : change.prop;
+    const label =
+      isHtml || isText
+        ? t('rt_content_change')
+        : isSrc
+          ? t('replace_media_change')
+          : def
+            ? t(def.labelKey)
+            : change.prop;
     const fmt = (v: string): string => (isHtml ? htmlToText(v) : isSrc ? srcSummary(v) : v);
-    return `${label}: ${truncateValue(fmt(change.oldValue))} → ${truncateValue(fmt(change.newValue))}`;
-  });
+    lines.push(`${label}: ${truncateValue(fmt(change.oldValue))} → ${truncateValue(fmt(change.newValue))}`);
+  }
+  for (const rc of annotation.richText ?? []) {
+    lines.push(rc.summary);
+  }
+  return lines;
 }
 
 /** 打开的卡片记录 */
@@ -1075,7 +1109,10 @@ export class PanelManager {
     }
 
     // 下半：调整项区（有修改时显示，pd-diff 精简格式：原值 → 新值）
-    if (annotation.changes.length > 0) {
+    // F21：富文本 DOM 还原载体（cssProp==='richtext'）不展示；富文本格式修改由 richText[] 呈现。
+    const displayChanges = annotation.changes.filter((c) => c.cssProp !== RICHTEXT_DOM_CSSPROP);
+    const richRows = annotation.richText ?? [];
+    if (displayChanges.length > 0 || richRows.length > 0) {
       if (annotation.note) {
         const hr = document.createElement('div');
         hr.className = 'hr';
@@ -1084,16 +1121,17 @@ export class PanelManager {
       const mods = document.createElement('div');
       mods.className = 'mods';
       mods.setAttribute('data-testid', 'pd-card-mods');
-      for (const change of annotation.changes) {
+      for (const change of displayChanges) {
         const row = document.createElement('div');
         row.className = 'mod';
         const k = document.createElement('span');
         k.className = 'k';
         const def = FIELD_DEFS[change.prop];
-        // 富文本内容修改（cssProp='html'）/ 媒体替换（cssProp='src'）：友好标签 + 精简值
+        // 富文本纯文本内容修改（cssProp='html'/'text'）/ 媒体替换（cssProp='src'）：友好标签 + 精简值
         const isHtml = change.cssProp === 'html';
+        const isText = change.cssProp === 'text';
         const isSrc = change.cssProp === 'src';
-        if (isHtml) {
+        if (isHtml || isText) {
           k.textContent = t('rt_content_change');
         } else if (isSrc) {
           k.textContent = t('replace_media_change');
@@ -1113,6 +1151,17 @@ export class PanelManager {
         to.textContent = truncateValue(format(change.newValue));
         diff.appendChild(to);
         row.appendChild(diff);
+        mods.appendChild(row);
+      }
+      // 结构化富文本修改：每条一行预生成 summary（与导出/图卡共用同一措辞）
+      for (const rc of richRows) {
+        const row = document.createElement('div');
+        row.className = 'mod';
+        row.setAttribute('data-testid', 'pd-card-richtext');
+        const line = document.createElement('span');
+        line.className = 'pd-diff';
+        line.textContent = rc.summary;
+        row.appendChild(line);
         mods.appendChild(row);
       }
       card.appendChild(mods);

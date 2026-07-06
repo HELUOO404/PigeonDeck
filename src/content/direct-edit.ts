@@ -1,22 +1,58 @@
 /* ============================================================
-   direct-edit.ts — 直接编辑文本 + 图片/视频替换（阶段 4a/4b）
+   direct-edit.ts — 直接编辑文本 + 图片/视频替换（阶段 4a/4b · F21 重写）
    双击文本元素 → contentEditable 内联编辑 + 富文本浮条。
    双击图片/视频 → 替换弹层（本地文件 / URL）。
    单击延迟协议：text/image/video 单击延迟 250ms（PanelManager.cancelPendingOpen 抢占）。
    触发 dblclick 时抢占待定 open，进入编辑/替换。
-   编辑结束：blur/点外部/Esc → 提交 richText StyleChange → 撤销历史。
+   F21 提交/退出模型：进入编辑后，**除**点保存对勾或按 Ctrl/Cmd+Enter（提交）、
+   或按 Esc（丢弃）外，任何操作都不退出编辑——不再有 blur 自动提交、点外部自动提交、
+   双击另一元素自动提交（编辑中双击一律忽略）。
+   提交：从富文本浮条读结构化 RichTextChange[] + 纯文本变化 → 并入标注 richText[]/changes[]
+   + DOM 还原载体（本会话 innerHTML/text-align 快照）→ 撤销历史（单步还原到本会话进入前）。
    替换执行：记 replaceMedia StyleChange（cssProp='src'）→ 撤销历史。
    ============================================================ */
 
 import { Controller } from './controller';
-import { AnnotationStore, mergeChanges, StyleChange } from '../state/annotations';
+import {
+  AnnotationStore,
+  mergeChanges,
+  mergeRichText,
+  StyleChange,
+  RichTextDomSnapshot,
+  RICHTEXT_DOM_CSSPROP,
+} from '../state/annotations';
 import { History } from '../state/history';
 import { Overlay } from './overlay';
 import { Settings } from '../state/settings';
-import { PanelManager } from './panel';
+import { PanelManager, applyChangesTo } from './panel';
 import { RichTextBar } from './inline-richtext';
 import { openReplaceMedia } from './replace-media';
 import { buildSelector, classifyElement, getElementSummary } from '../shared/dom-utils';
+
+/** 富文本 DOM 还原快照序列化（editEl innerHTML + 自身 text-align） */
+function serializeSnap(html: string, textAlign: string): string {
+  const snap: RichTextDomSnapshot = { html, textAlign };
+  return JSON.stringify(snap);
+}
+
+/** HTML 片段 → 归一化纯文本（判定纯文本内容是否变化，供导出 Content 行） */
+function htmlToPlainText(html: string): string {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return (div.textContent ?? '').replace(/\s+/g, ' ').trim();
+}
+
+/** 进入编辑时临时写在 editEl 内联样式上的「编辑态观感 + 最小重置」属性（退出精确还原，绝不整段抹写） */
+const CHROME_PROPS = [
+  'outline',
+  'outline-offset',
+  'border-radius',
+  'user-select',
+  '-webkit-user-modify',
+  'cursor',
+  'pointer-events',
+  'white-space',
+] as const;
 
 export class DirectEditManager {
   private controller: Controller;
@@ -29,13 +65,14 @@ export class DirectEditManager {
   private editEl: HTMLElement | null = null;
   /** 编辑前快照 innerHTML */
   private snapshot: string = '';
+  /** 编辑前 editEl 自身内联 text-align（'' = 无）——对齐落此，退出/还原需要 */
+  private enterTextAlign: string = '';
   /**
-   * 编辑前元素原始 style 属性（含 null = 无 style 属性）。
-   * 进入编辑时会往元素内联样式写入编辑态样式（金边/user-select 等，
-   * 因为编辑元素在 light DOM，shadow 内的 [data-pd-editing] 规则无效），
-   * 退出时按此原样恢复，避免留下残留内联样式。
+   * 编辑态临时 chrome 属性的原始内联值（value+priority），退出时逐条精确还原
+   * （仅动这几条，绝不整段快照/抹写 style 属性——那会连带抹掉用户在编辑期间
+   * 施加的 text-align/字号等真实修改，正是 F21 要修的老 bug）。
    */
-  private originalStyleAttr: string | null = null;
+  private chromeOrig: Array<{ prop: string; value: string; priority: string }> = [];
   /** 当前富文本浮条实例 */
   private rtBar: RichTextBar | null = null;
   /** 当前替换弹层句柄 */
@@ -83,6 +120,13 @@ export class DirectEditManager {
   private onDblClick = (ev: MouseEvent): void => {
     if (!this.isActive() || this.isOwnUi(ev)) return;
 
+    // F21：编辑进行中——任何双击都忽略（唯一退出=保存对勾/Ctrl+Enter/Esc）
+    if (this.editEl) {
+      ev.preventDefault();
+      ev.stopPropagation();
+      return;
+    }
+
     const target = ev.target;
     if (!(target instanceof HTMLElement)) return;
     if (target === document.documentElement || target === document.body) return;
@@ -94,8 +138,6 @@ export class DirectEditManager {
       ev.preventDefault();
       ev.stopPropagation();
       this.panel.cancelPendingOpen();
-      // 有内联编辑在进行则先提交
-      if (this.editEl) this.exitEdit(true);
       this.openReplace(target, type);
       return;
     }
@@ -108,14 +150,7 @@ export class DirectEditManager {
     ev.stopPropagation();
     this.panel.cancelPendingOpen();
 
-    // 如果点的是另一个元素，先提交当前编辑
-    if (this.editEl && this.editEl !== target) {
-      this.exitEdit(true);
-    }
-
-    if (!this.editEl) {
-      this.enterEdit(target);
-    }
+    this.enterEdit(target);
   };
 
   private onKeyDown = (ev: KeyboardEvent): void => {
@@ -123,14 +158,21 @@ export class DirectEditManager {
     if (ev.key === 'Escape') {
       ev.preventDefault();
       ev.stopPropagation();
-      this.exitEdit(false); // Esc = 取消，恢复快照不记录
+      this.exitEdit(false); // Esc = 丢弃，还原进入前状态、不记录
+      return;
+    }
+    // F21：Ctrl/Cmd+Enter = 提交（与保存对勾等价；普通 Enter 仍在块内换行）
+    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+      ev.preventDefault();
+      ev.stopPropagation();
+      this.exitEdit(true);
     }
   };
 
   private enterEdit(el: HTMLElement): void {
     this.snapshot = el.innerHTML;
-    // 记录原始 style 属性，退出时原样恢复（编辑态样式写在内联样式上）
-    this.originalStyleAttr = el.getAttribute('style');
+    // 进入前 editEl 自身内联 text-align（对齐会写这里；退出/还原以此为基准）
+    this.enterTextAlign = el.style.textAlign;
     this.applyEditingStyles(el);
     el.contentEditable = 'true';
     el.dataset['pdEditing'] = '';
@@ -138,15 +180,16 @@ export class DirectEditManager {
     this.editEl = el;
     this.panel.setInlineEditActive(el);
 
-    // 监听 blur 和 mousedown（点外部）
-    el.addEventListener('blur', this.onEditBlur, { capture: true, once: true });
-    window.addEventListener('mousedown', this.onOutsideMouseDown, true);
     // 编辑态内屏蔽 <a> 跳转（框选/点击链接文本只落光标，不导航）
     el.addEventListener('click', this.onEditAnchorNav, true);
     el.addEventListener('auxclick', this.onEditAnchorNav, true);
 
-    // 富文本浮条
-    this.rtBar = new RichTextBar({ panelLayer: this.panelLayer, editEl: el });
+    // 富文本浮条（保存对勾 → 提交）
+    this.rtBar = new RichTextBar({
+      panelLayer: this.panelLayer,
+      editEl: el,
+      onCommit: () => this.exitEdit(true),
+    });
   }
 
   /**
@@ -155,9 +198,15 @@ export class DirectEditManager {
    * -webkit-user-modify、pointer-events:none 等），导致无法编辑或样式错乱。
    * 这里用内联样式（多数场景可压过宿主规则，必要处加 !important）打上编辑态
    * 观感 + 最小重置。金色取 --c1 令牌具体值（light DOM 无法解析 var()）。
+   * 施加前逐条记录原始内联值，退出时精确还原（F21：绝不整段快照/抹写 style）。
    */
   private applyEditingStyles(el: HTMLElement): void {
     const s = el.style;
+    this.chromeOrig = CHROME_PROPS.map((p) => ({
+      prop: p,
+      value: s.getPropertyValue(p),
+      priority: s.getPropertyPriority(p),
+    }));
     // 金边观感（照 [data-pd-editing]：1.5px 实线 + 偏移 + 小圆角）
     s.setProperty('outline', '1.5px solid #b8842c', 'important');
     s.setProperty('outline-offset', '3px', 'important');
@@ -170,14 +219,18 @@ export class DirectEditManager {
     s.setProperty('white-space', 'normal');
   }
 
-  /** 退出编辑时按进入前的 style 属性原样恢复 */
+  /**
+   * 退出编辑：逐条精确还原编辑态 chrome 属性到进入前的内联值
+   * （有原值 → 还原；原本没有 → removeProperty），
+   * 用户在编辑期间对 text-align/字号等的真实修改一律不动（不在此列表中）。
+   */
   private restoreEditingStyles(el: HTMLElement): void {
-    if (this.originalStyleAttr === null) {
-      el.removeAttribute('style');
-    } else {
-      el.setAttribute('style', this.originalStyleAttr);
+    const s = el.style;
+    for (const { prop, value, priority } of this.chromeOrig) {
+      if (value) s.setProperty(prop, value, priority);
+      else s.removeProperty(prop);
     }
-    this.originalStyleAttr = null;
+    this.chromeOrig = [];
   }
 
   /** 编辑态内点/中键点链接：阻止导航（不 stopPropagation，保住光标定位） */
@@ -189,72 +242,66 @@ export class DirectEditManager {
     if (inAnchor) ev.preventDefault();
   };
 
-  /** 编辑元素 blur（切焦点时提交） */
-  private onEditBlur = (): void => {
-    // 若焦点转入 panelLayer 内部（浮条/popover），不提交
-    setTimeout(() => {
-      const active = document.activeElement;
-      if (active && this.panelLayer.contains(active)) return;
-      if (this.editEl) this.exitEdit(true);
-    }, 0);
-  };
-
-  /** 点编辑区外且非浮条/面板时提交 */
-  private onOutsideMouseDown = (ev: MouseEvent): void => {
-    if (!this.editEl) return;
-    const path = ev.composedPath();
-    // 点在编辑元素或其子元素内 → 不处理
-    if (path.includes(this.editEl)) return;
-    // 点在 shadow（面板层/浮条）内 → 不处理（浮条按钮 mousedown 已 preventDefault）
-    if (this.isOwnUi(ev)) return;
-    this.exitEdit(true);
-  };
-
-  /** 提交或取消内联编辑 */
+  /**
+   * 提交（commit=true，保存对勾/Ctrl+Enter）或丢弃（commit=false，Esc）内联编辑。
+   * 提交：从浮条读结构化 richText[] + 纯文本变化 → 并入标注 + DOM 还原载体 + 撤销历史。
+   */
   private exitEdit(commit: boolean): void {
     const el = this.editEl;
     if (!el) return;
 
     // 清理事件
-    el.removeEventListener('blur', this.onEditBlur, true);
-    window.removeEventListener('mousedown', this.onOutsideMouseDown, true);
     el.removeEventListener('click', this.onEditAnchorNav, true);
     el.removeEventListener('auxclick', this.onEditAnchorNav, true);
 
-    // 销毁浮条
+    // 提交前读浮条结构化修改（销毁前）
+    const richText = this.rtBar?.getChanges() ?? [];
     this.rtBar?.destroy();
     this.rtBar = null;
 
-    // 读新内容
-    const newHtml = el.innerHTML;
-
-    // 退出编辑态（恢复原始内联样式，清除编辑态金边/重置）
+    // 退出编辑态（先清 contentEditable/金边，再取“干净”提交快照）
     el.contentEditable = 'inherit';
     delete el.dataset['pdEditing'];
     this.restoreEditingStyles(el);
     this.editEl = null;
     this.panel.setInlineEditActive(null);
 
+    const enterHtml = this.snapshot;
+    const enterAlign = this.enterTextAlign;
+
     if (!commit) {
-      // Esc：恢复快照
-      el.innerHTML = this.snapshot;
+      // Esc：丢弃——还原 innerHTML + 自身 text-align 到进入前
+      el.innerHTML = enterHtml;
+      el.style.textAlign = enterAlign;
       return;
     }
 
-    // 无变化：跳过
-    if (newHtml === this.snapshot) return;
+    const commitHtml = el.innerHTML;
+    const commitAlign = el.style.textAlign;
 
-    const oldHtml = this.snapshot;
+    // 纯文本内容变化（供导出 Content 行 + 卡片文本内容行）
+    const textOld = htmlToPlainText(enterHtml);
+    const textNew = htmlToPlainText(commitHtml);
+    const textChanged = textOld !== textNew;
+
+    // 无实质修改（无格式修改、无文本变化）→ 不落盘（net-zero 格式如加粗又取消也走这里）
+    if (richText.length === 0 && !textChanged) return;
+
+    // DOM 还原载体（本会话 enter/commit 快照；撤销/删除/清空复用 applyChangesTo）
+    const carrier: StyleChange = {
+      prop: 'richtext',
+      cssProp: RICHTEXT_DOM_CSSPROP,
+      oldValue: serializeSnap(enterHtml, enterAlign),
+      newValue: serializeSnap(commitHtml, commitAlign),
+    };
+    const sessionChanges: StyleChange[] = [];
+    if (textChanged) {
+      sessionChanges.push({ prop: 'text', cssProp: 'text', oldValue: textOld, newValue: textNew });
+    }
+    sessionChanges.push(carrier);
+
     const selector = buildSelector(el);
     const existing = this.store.getBySelector(selector);
-
-    // 构建 richText StyleChange
-    const change = {
-      prop: 'richText',
-      cssProp: 'html',
-      oldValue: oldHtml,
-      newValue: newHtml,
-    };
 
     const resolveEl = (): HTMLElement | null => {
       try {
@@ -266,23 +313,24 @@ export class DirectEditManager {
     };
 
     if (existing) {
-      // 合并入已有标注（保留 richText 属性的 oldValue 来自最初快照，newValue 为最新）
-      const merged = mergeChanges(existing.changes, [change]);
-      const savedAnnotation = this.store.update(existing.id, { changes: merged });
-      if (savedAnnotation) {
-        const after = savedAnnotation;
-        const before = existing;
+      // 并入已有标注：changes 按 prop 合并（保留最初 old、取最新 new），richText 结构化归并。
+      const before = existing;
+      const mergedChanges = mergeChanges(before.changes, sessionChanges);
+      const mergedRich = mergeRichText(before.richText ?? [], richText);
+      const saved = this.store.update(before.id, { changes: mergedChanges, richText: mergedRich });
+      if (saved) {
+        const after = saved;
         this.history.push({
           label: 'richtext:update',
+          // 撤销粒度：DOM 用**本会话** enter/commit 快照（[carrier]），单次撤销回到本会话进入前，
+          // store 恢复 before/after 整条标注 —— DOM 与 store 一致。
           apply: () => {
-            const t = resolveEl();
-            if (t) t.innerHTML = after.changes.find((c) => c.prop === 'richText')?.newValue ?? newHtml;
-            this.store.update(after.id, { changes: after.changes });
+            applyChangesTo(resolveEl(), [carrier], 'new');
+            this.store.update(after.id, { changes: after.changes, richText: after.richText });
           },
           revert: () => {
-            const t = resolveEl();
-            if (t) t.innerHTML = before.changes.find((c) => c.prop === 'richText')?.oldValue ?? oldHtml;
-            this.store.update(before.id, { changes: before.changes });
+            applyChangesTo(resolveEl(), [carrier], 'old');
+            this.store.update(before.id, { changes: before.changes, richText: before.richText });
           },
         });
       }
@@ -293,7 +341,8 @@ export class DirectEditManager {
         elementType: classifyElement(el),
         summary: getElementSummary(el),
         note: '',
-        changes: [change],
+        changes: sessionChanges,
+        richText,
         viewportPos: {
           x: Math.round(rect.x),
           y: Math.round(rect.y),
@@ -304,13 +353,11 @@ export class DirectEditManager {
       this.history.push({
         label: 'richtext:add',
         apply: () => {
-          const t = resolveEl();
-          if (t) t.innerHTML = newHtml;
+          applyChangesTo(resolveEl(), [carrier], 'new');
           this.store.restore(added);
         },
         revert: () => {
-          const t = resolveEl();
-          if (t) t.innerHTML = oldHtml;
+          applyChangesTo(resolveEl(), [carrier], 'old');
           this.store.remove(added.id);
         },
       });

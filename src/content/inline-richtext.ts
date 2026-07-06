@@ -1,26 +1,31 @@
 /* ============================================================
-   inline-richtext.ts — Word 式双行富文本浮条（阶段 4a）
+   inline-richtext.ts — Word 式双行富文本浮条（阶段 4a / F21 重写）
    视觉配方严格照搬 preview/parts/24-inline-edit.html 的 .rtbar 结构。
    显示时机：进入内联编辑即常驻显示，直到退出编辑（有非折叠选区贴选区上方，
    否则锚定 editEl 上边缘，绝不遮挡正在编辑的文字）。
    所有浮条按钮在 mousedown 上 preventDefault（保住选区、避免 contentEditable 失焦）。
-   execCommand 在 click 里执行（mousedown 后 click 仍会触发）。
-   字体/字号：不走 execCommand（其产出的 font-family/font-size 无 !important，
-   会输给宿主页的 !important 规则），改为把当前选区包进
-   <span style="font-family|font-size: … !important">（wrapSelectionStyle），
-   保住选区、可链式修改，且稳压宿主 CSS。
+   F21：彻底放弃 execCommand（对齐/字色/加粗等要么写不进导出、要么落在 editEl 自身
+   style 上被退出时的整段还原抹掉）。改为统一「意图捕获」——每个动作执行即：
+   - 选区态：把选区包进带内联样式的 <span>（字体/字号加 !important 稳压宿主）；
+   - 光标态：作用于整块（复用单层包裹 span；对齐写 editEl.style.text-align）；
+   并同步 push 一条结构化 RichTextChange 到会话缓冲，作为导出到 AI 提示词的唯一富文本源。
+   底部右下角原「无序列表」钮改为「保存对勾」，是显式提交编辑的入口之一（另一为 Ctrl/Cmd+Enter）。
    ============================================================ */
 
-import { t } from './i18n';
+import { t, getLocale } from './i18n';
 import { openColorPicker } from './color-picker';
 import { openDropdown, sampleAncestorValues, primaryFontFamily } from './dropdown';
+import type { RichTextChange, RichTextKind } from '../state/annotations';
+import { mergeRichText } from '../state/annotations';
+import { formatRichTextLine, richTextLabelsFor } from './format';
 
 /* ---- SVG 图标 ---- */
 
 const chevD = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
 const highlightIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="m9 11-6 6v3h9l3-3"/><path d="m22 12-4.6 4.6a2 2 0 0 1-2.8 0l-5.2-5.2a2 2 0 0 1 0-2.8L14 4"/></svg>`;
 const alignIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="21" x2="3" y1="6" y2="6"/><line x1="17" x2="7" y1="12" y2="12"/><line x1="19" x2="5" y1="18" y2="18"/></svg>`;
-const listIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="9" x2="21" y1="6" y2="6"/><line x1="9" x2="21" y1="12" y2="12"/><line x1="9" x2="21" y1="18" y2="18"/><circle cx="4" cy="6" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="12" r="1.4" fill="currentColor" stroke="none"/><circle cx="4" cy="18" r="1.4" fill="currentColor" stroke="none"/></svg>`;
+/** 保存对勾图标（Lucide check）——底部原「无序列表」钮改为「保存」提交按钮（F21#1） */
+const checkIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>`;
 
 /* ---- 字体/字号列表 ---- */
 
@@ -82,20 +87,37 @@ export interface RichTextBarOptions {
   panelLayer: HTMLElement;
   /** 当前正在编辑的 contentEditable 元素 */
   editEl: HTMLElement;
+  /** 保存对勾（或 Ctrl/Cmd+Enter）提交编辑（F21：唯一显式提交入口之一） */
+  onCommit: () => void;
+}
+
+/** computed text-align 归一为可读值（start/end → left/right，空 → left） */
+function normalizeAlign(v: string): string {
+  if (v === 'start') return 'left';
+  if (v === 'end') return 'right';
+  return v || 'left';
 }
 
 export class RichTextBar {
   private el: HTMLElement;
   private panelLayer: HTMLElement;
   private editEl: HTMLElement;
+  private onCommit: () => void;
   /** 当前颜色状态（字色 abar） */
   private currentFgColor = 'var(--c1)';
   /** 打开弹层前存下的选区（弹层交互会塌陷页面选区，回调时恢复） */
   private savedRange: Range | null = null;
+  /**
+   * 本次编辑会话的结构化富文本修改缓冲（F21）：每个动作在**执行即记录**
+   * （按意图捕获，不靠 diff innerHTML）。提交时由 DirectEditManager 读取
+   * getChanges() 归并后并入标注 richText[]，作为导出唯一富文本源。
+   */
+  private changes: RichTextChange[] = [];
 
   constructor(opts: RichTextBarOptions) {
     this.panelLayer = opts.panelLayer;
     this.editEl = opts.editEl;
+    this.onCommit = opts.onCommit;
     this.el = this.buildBar();
     this.panelLayer.appendChild(this.el);
 
@@ -112,6 +134,11 @@ export class RichTextBar {
     window.removeEventListener('scroll', this.reposition, true);
     window.removeEventListener('resize', this.reposition);
     this.el.remove();
+  }
+
+  /** 读取本次会话归并去重后的结构化修改（提交时 DirectEditManager 调用） */
+  getChanges(): RichTextChange[] {
+    return mergeRichText([], this.changes);
   }
 
   /**
@@ -154,6 +181,166 @@ export class RichTextBar {
     this.el.style.top = `${top}px`;
   }
 
+  // ============================================================
+  // 应用 + 记录（F21：DROP execCommand，统一 span 包裹 / 元素级样式）
+  // 这些 public 方法既是浮条按钮/弹层回调的落点，也是单测的驱动入口。
+  // ============================================================
+
+  /** 字体：包选区或整块，记 kind='font-family'（old/new 为首选族名） */
+  applyFontFamily(value: string): void {
+    const old = primaryFontFamily(this.getComputedProp('fontFamily'));
+    const ctx = this.applyStyle('font-family', resolveFontStack(value), true);
+    this.record('font-family', ctx.target, ctx.targetText, old, value);
+  }
+
+  /** 字号：包选区或整块，记 kind='font-size'（old=computed，如 '16px'；new='Npx'） */
+  applyFontSize(px: string): void {
+    const old = this.getComputedProp('fontSize');
+    const ctx = this.applyStyle('font-size', `${px}px`, true);
+    this.record('font-size', ctx.target, ctx.targetText, old, `${px}px`);
+  }
+
+  /** 字色：包选区或整块，记 kind='color' */
+  applyColor(css: string): void {
+    const old = this.getComputedProp('color');
+    const ctx = this.applyStyle('color', css, false);
+    this.currentFgColor = css;
+    this.record('color', ctx.target, ctx.targetText, old, css);
+  }
+
+  /** 高亮：包选区或整块 background-color，记 kind='highlight' */
+  applyHighlight(css: string): void {
+    const old = this.getComputedProp('backgroundColor');
+    const ctx = this.applyStyle('background-color', css, false);
+    this.record('highlight', ctx.target, ctx.targetText, old, css);
+  }
+
+  /**
+   * 对齐：绝不写 span，始终作用于可编辑块自身 style.text-align（元素级），
+   * 记 kind='align'、target='element'（含仅光标态，满足 F21#4）。
+   * text-align 的 DOM 还原由 richtext 载体（editEl.textAlign 快照）负责。
+   */
+  applyAlign(dir: 'left' | 'center' | 'right'): void {
+    const old = normalizeAlign(this.getComputedProp('textAlign'));
+    this.editEl.style.setProperty('text-align', dir);
+    this.record('align', 'element', undefined, old, dir);
+  }
+
+  toggleBold(): void {
+    this.applyToggle('bold', 'font-weight', '700', 'normal', this.weightIsBold());
+  }
+  toggleItalic(): void {
+    this.applyToggle('italic', 'font-style', 'italic', 'normal', this.styleIsItalic());
+  }
+  toggleUnderline(): void {
+    this.applyToggle('underline', 'text-decoration-line', 'underline', 'none', this.hasDecoration('underline'));
+  }
+  toggleStrike(): void {
+    this.applyToggle('strike', 'text-decoration-line', 'line-through', 'none', this.hasDecoration('line-through'));
+  }
+  toggleSuperscript(): void {
+    this.applyToggle('superscript', 'vertical-align', 'super', 'baseline', this.getComputedProp('verticalAlign') === 'super');
+  }
+  toggleSubscript(): void {
+    this.applyToggle('subscript', 'vertical-align', 'sub', 'baseline', this.getComputedProp('verticalAlign') === 'sub');
+  }
+
+  private weightIsBold(): boolean {
+    const w = this.getComputedProp('fontWeight');
+    return w === 'bold' || (parseInt(w, 10) || 0) >= 600;
+  }
+  private styleIsItalic(): boolean {
+    const s = this.getComputedProp('fontStyle');
+    return s === 'italic' || s.startsWith('oblique');
+  }
+  private hasDecoration(kind: 'underline' | 'line-through'): boolean {
+    return this.getComputedProp('textDecorationLine').includes(kind);
+  }
+
+  /** 开关类：按当前态取反 → 应用 → 记 old/new='on'/'off' */
+  private applyToggle(
+    kind: RichTextKind,
+    cssProp: string,
+    onVal: string,
+    offVal: string,
+    isOn: boolean
+  ): void {
+    const ctx = this.applyStyle(cssProp, isOn ? offVal : onVal, false);
+    this.record(kind, ctx.target, ctx.targetText, isOn ? 'on' : 'off', isOn ? 'off' : 'on');
+  }
+
+  /**
+   * 有非折叠选区 → 包选区 span；否则（光标态）→ 整块（复用/新建单层包裹 span）。
+   * 返回本次作用范围，供 record 归类。读 ctx 在 apply 之前（apply 会改选区/DOM）。
+   */
+  private applyStyle(cssProp: string, value: string, important: boolean): {
+    target: 'selection' | 'element';
+    targetText?: string;
+  } {
+    const ctx = this.currentTargetContext();
+    if (ctx.target === 'selection') {
+      this.wrapSelectionStyle(cssProp, value, important);
+    } else {
+      this.elementScopeApply(cssProp, value, important);
+    }
+    return ctx;
+  }
+
+  /** 当前活动选区落在 editEl 内且非折叠 → 'selection' + 文本；否则 'element' */
+  private currentTargetContext(): { target: 'selection' | 'element'; targetText?: string } {
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount && !sel.isCollapsed) {
+      const r = sel.getRangeAt(0);
+      if (this.editEl.contains(r.commonAncestorContainer)) {
+        return { target: 'selection', targetText: r.toString() };
+      }
+    }
+    return { target: 'element' };
+  }
+
+  /**
+   * 元素级应用（光标态/无选区）：把整块内容包进单层 <span> 并设样式。
+   * 已存在唯一包裹 span 时直接复用，避免元素级链式修改叠套嵌套。
+   */
+  private elementScopeApply(cssProp: string, value: string, important: boolean): void {
+    const el = this.editEl;
+    const priority = important ? 'important' : '';
+    const only = el.firstChild;
+    if (
+      el.childNodes.length === 1 &&
+      only instanceof HTMLElement &&
+      only.tagName === 'SPAN'
+    ) {
+      only.style.setProperty(cssProp, value, priority);
+      return;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    if (range.collapsed) return; // 空元素，无内容可包
+    const span = document.createElement('span');
+    span.style.setProperty(cssProp, value, priority);
+    try {
+      range.surroundContents(span);
+    } catch {
+      const frag = range.extractContents();
+      span.appendChild(frag);
+      el.appendChild(span);
+    }
+  }
+
+  /** 记录一条结构化修改（summary 用当前界面语言预生成，卡片直接展示） */
+  private record(
+    kind: RichTextKind,
+    target: 'selection' | 'element',
+    targetText: string | undefined,
+    oldValue: string,
+    newValue: string
+  ): void {
+    const change: RichTextChange = { kind, target, targetText, oldValue, newValue, summary: '' };
+    change.summary = formatRichTextLine(change, richTextLabelsFor(getLocale()));
+    this.changes.push(change);
+  }
+
   private buildBar(): HTMLElement {
     const bar = document.createElement('div');
     bar.className = 'pd-surface rtbar';
@@ -181,8 +368,7 @@ export class RichTextBar {
         current: primaryFontFamily(this.getComputedProp('fontFamily')),
         onPick: (v) => {
           this.restoreSelection();
-          // 用 !important 内联 span 稳压宿主页 !important 规则
-          this.wrapSelectionStyle('font-family', resolveFontStack(v), true);
+          this.applyFontFamily(v);
         },
       });
     });
@@ -207,9 +393,7 @@ export class RichTextBar {
         current: Math.round(parseFloat(this.getComputedProp('fontSize'))).toString(),
         onPick: (v) => {
           this.restoreSelection();
-          // 直接把选区包进 <span style="font-size:Npx !important">，不再整段重写 innerHTML
-          // （旧法会毁掉选区与节点标识，导致后续命令作用于失效节点）
-          this.wrapSelectionStyle('font-size', `${v}px`, true);
+          this.applyFontSize(v);
         },
       });
     });
@@ -240,10 +424,8 @@ export class RichTextBar {
         value: this.getComputedProp('color'),
         onChange: (css) => {
           this.restoreSelection();
-          this.execStyle();
-          document.execCommand('foreColor', false, css);
+          this.applyColor(css);
           colorBar.style.background = css;
-          this.currentFgColor = css;
         },
       });
     });
@@ -265,10 +447,7 @@ export class RichTextBar {
         value: this.getComputedProp('backgroundColor'),
         onChange: (css) => {
           this.restoreSelection();
-          this.execStyle();
-          if (!document.execCommand('hiliteColor', false, css)) {
-            document.execCommand('backColor', false, css);
-          }
+          this.applyHighlight(css);
         },
       });
     });
@@ -276,7 +455,7 @@ export class RichTextBar {
 
     bar.appendChild(row1);
 
-    // ---- 第二行：B/I/U/S / 上标/下标 / 对齐 ▾ / 列表 ---- //
+    // ---- 第二行：B/I/U/S / 上标/下标 / 对齐 ▾ / 保存 ---- //
     const row2 = document.createElement('div');
     row2.className = 'rtrow';
 
@@ -284,14 +463,10 @@ export class RichTextBar {
     const fmt = document.createElement('div');
     fmt.className = 'fmt';
 
-    const bBtn = this.makeFmtBtn('B', 'b', t('rt_bold'), 'pd-rt-bold', () => document.execCommand('bold'));
-    const iBtn = this.makeFmtBtn('I', 'i', t('rt_italic'), 'pd-rt-italic', () => document.execCommand('italic'));
-    const uBtn = this.makeFmtBtn('U', 'u', t('rt_underline'), 'pd-rt-underline', () => document.execCommand('underline'));
-    const sBtn = this.makeFmtBtn('S', 's', t('rt_strike'), 'pd-rt-strike', () => document.execCommand('strikeThrough'));
-    fmt.appendChild(bBtn);
-    fmt.appendChild(iBtn);
-    fmt.appendChild(uBtn);
-    fmt.appendChild(sBtn);
+    fmt.appendChild(this.makeFmtBtn('B', 'b', t('rt_bold'), 'pd-rt-bold', () => this.toggleBold()));
+    fmt.appendChild(this.makeFmtBtn('I', 'i', t('rt_italic'), 'pd-rt-italic', () => this.toggleItalic()));
+    fmt.appendChild(this.makeFmtBtn('U', 'u', t('rt_underline'), 'pd-rt-underline', () => this.toggleUnderline()));
+    fmt.appendChild(this.makeFmtBtn('S', 's', t('rt_strike'), 'pd-rt-strike', () => this.toggleStrike()));
     row2.appendChild(fmt);
 
     row2.appendChild(this.makeSep());
@@ -302,7 +477,7 @@ export class RichTextBar {
     supBtn.setAttribute('title', t('rt_superscript'));
     supBtn.innerHTML = '<span>x<sup>2</sup></span>';
     supBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
-    supBtn.addEventListener('click', () => { this.execStyle(); document.execCommand('superscript'); });
+    supBtn.addEventListener('click', () => this.toggleSuperscript());
     row2.appendChild(supBtn);
 
     // 下标
@@ -311,47 +486,46 @@ export class RichTextBar {
     subBtn.setAttribute('title', t('rt_subscript'));
     subBtn.innerHTML = '<span>x<sub>2</sub></span>';
     subBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
-    subBtn.addEventListener('click', () => { this.execStyle(); document.execCommand('subscript'); });
+    subBtn.addEventListener('click', () => this.toggleSubscript());
     row2.appendChild(subBtn);
 
     row2.appendChild(this.makeSep());
 
-    // 对齐下拉
+    // 对齐下拉（值即 CSS text-align，作用于整块）
     const alignBtn = document.createElement('button');
     alignBtn.className = 'tb';
     alignBtn.setAttribute('title', t('rt_align'));
+    alignBtn.setAttribute('data-testid', 'pd-rt-align');
     alignBtn.innerHTML = alignIcon + `<svg class="car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>`;
     alignBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
     alignBtn.addEventListener('click', () => {
-      this.saveSelection();
       openDropdown({
         root: this.panelLayer,
         anchor: alignBtn,
         items: [
-          { value: 'justifyLeft', label: 'Left' },
-          { value: 'justifyCenter', label: 'Center' },
-          { value: 'justifyRight', label: 'Right' },
+          { value: 'left', label: 'Left' },
+          { value: 'center', label: 'Center' },
+          { value: 'right', label: 'Right' },
         ],
-        current: '',
+        current: normalizeAlign(this.getComputedProp('textAlign')),
         onPick: (v) => {
-          this.restoreSelection();
-          this.execStyle();
-          document.execCommand(v);
+          this.editEl.focus();
+          this.applyAlign(v as 'left' | 'center' | 'right');
         },
       });
     });
     row2.appendChild(alignBtn);
 
-    // 列表（无序/项目符号列表；图标为左侧圆点，区别于对齐图标）
-    // 注：insertUnorderedList 是块级命令，editEl 为行内元素时浏览器可能 no-op（不报错）。
-    const listBtn = document.createElement('button');
-    listBtn.className = 'tb';
-    listBtn.setAttribute('title', t('rt_list'));
-    listBtn.setAttribute('data-testid', 'pd-rt-list');
-    listBtn.innerHTML = listIcon;
-    listBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
-    listBtn.addEventListener('click', () => { this.execStyle(); document.execCommand('insertUnorderedList'); });
-    row2.appendChild(listBtn);
+    // 保存对勾（F21#1：底部原「列表」钮改为提交编辑）
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'tb';
+    saveBtn.setAttribute('title', t('rt_save'));
+    saveBtn.setAttribute('data-testid', 'pd-rt-save');
+    saveBtn.innerHTML = checkIcon;
+    // mousedown 上 preventDefault：保住 editable 焦点/选区，click 才不被 blur 抢先
+    saveBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
+    saveBtn.addEventListener('click', () => this.onCommit());
+    row2.appendChild(saveBtn);
 
     bar.appendChild(row2);
 
@@ -398,16 +572,8 @@ export class RichTextBar {
     btn.setAttribute('data-testid', testId);
     btn.textContent = label;
     btn.addEventListener('mousedown', (ev) => ev.preventDefault());
-    btn.addEventListener('click', () => {
-      this.execStyle();
-      onExec();
-    });
+    btn.addEventListener('click', () => onExec());
     return btn;
-  }
-
-  /** 确保 execCommand 使用 CSS inline style */
-  private execStyle(): void {
-    document.execCommand('styleWithCSS', false, 'true');
   }
 
   /**
