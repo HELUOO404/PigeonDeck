@@ -5,7 +5,7 @@
 
 import designTokensCss from './design-tokens.css?inline';
 import baseCss from './base.css?inline';
-import { loadLocale, t } from './i18n';
+import { loadLocale } from './i18n';
 import { logger } from '../diagnostics/logger';
 import { Controller } from './controller';
 import { Toolbar } from './toolbar';
@@ -14,7 +14,6 @@ import { PanelManager } from './panel';
 import { Toast } from './toast';
 import { AnnotationStore, Annotation } from '../state/annotations';
 import { History } from '../state/history';
-import { restoreSession, bindSessionPersistence } from '../state/session';
 import { loadSettings, Settings } from '../state/settings';
 import { loadDisableState, isPageDisabled, KEY_GLOBAL, KEY_SITES } from '../state/disable';
 import { DirectEditManager } from './direct-edit';
@@ -26,7 +25,6 @@ import { CopyImageManager } from './capture';
 import { ClearManager } from './clear';
 import { SettingsManager } from './settings-panel';
 import { setupShortcuts } from './shortcuts';
-import { replayRestoredAnnotations } from './restore-replay';
 
 // 防重复注入标记
 const HOST_ID = 'pd-host';
@@ -98,24 +96,16 @@ function inject(settings: Settings): void {
     }
   });
 
-  // 批注链路：Store + 会话恢复 + 覆盖层 + 面板 + 轻提示
+  // 批注链路：Store + 覆盖层 + 面板 + 轻提示（标注仅存活于本 tab 会话内存，刷新不恢复）
   const panelLayer = shadow.querySelector<HTMLElement>('[data-layer="panel"]')!;
   const overlayLayer = shadow.querySelector<HTMLElement>('[data-layer="overlay"]')!;
   const feedbackLayer = shadow.querySelector<HTMLElement>('[data-layer="feedback"]')!;
 
   const store = new AnnotationStore();
-  const restored = restoreSession();
-  if (restored) store.load(restored);
-  bindSessionPersistence(store);
 
   // 撤销/重做历史栈（先建，Toolbar 需引用）
   const history = new History(settings.historyLimit);
 
-  // 刷新恢复（Cluster W5b Bug1）：store.load 只恢复数据，这里重放每条标注的 DOM
-  // 副作用（样式/移动/嵌入）并为每条重建撤销命令（Ctrl+Z 先撤最新）。须在 store.load
-  // + history 建好后、各 UI 管理器建好前执行——DOM 达最终态后 overlay 才据此解析标注框
-  // 位置、getUnresolvedCount 才准确。重父路径会把 selector 同步为当下位置。
-  if (restored) replayRestoredAnnotations(store, history);
 
   // Toolbar（接受 history，用于按钮禁用态订阅）
   const toolbar = new Toolbar(controller, controlLayer, history);
@@ -152,7 +142,6 @@ function inject(settings: Settings): void {
     overlay,
     panelLayer,
     settings,
-    toast,
     panel: panelManager,
   });
 
@@ -224,27 +213,13 @@ function inject(settings: Settings): void {
     onOpenOnboarding: () => chrome.runtime.sendMessage({ type: 'pd-open-onboarding' }),
   });
 
-  // 恢复后：未能定位的标注数据保留、UI 跳过，轻提示
-  if (restored && restored.annotations.length > 0) {
-    const missing = overlay.getUnresolvedCount();
-    if (missing > 0) {
-      toast.show(t('toast_restore_missing').replace('{n}', String(missing)));
-    }
-    // 卡片默认展开设置：为可定位的标注展开卡片
-    if (settings.cardDefaultExpanded) {
-      for (const a of store.getAll()) {
-        if (overlay.getTargetRect(a.id)) panelManager.openCard(a);
-      }
-    }
-  }
-
   logger.info('Shadow DOM injected with toolbar + annotation');
 }
 
 /**
  * 监听禁用状态变化：仅当「当前页禁用态实际翻转」（与当前是否已注入矛盾）时
  * reload。用重载实现实时启停——禁用后重载守卫跳过注入（UI 消失），启用后
- * 重载恢复注入（标注在 sessionStorage 天然恢复）。无残留监听 bug。
+ * 重载恢复注入（UI 恢复；标注为会话内存，重载后不保留）。无残留监听 bug。
  */
 function registerDisableWatcher(): void {
   if (!chrome?.storage?.onChanged) return;

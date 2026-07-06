@@ -59,10 +59,6 @@
     "message": "Delete annotation",
     "description": "Pin context menu / card delete action"
   },
-  "toast_restore_missing": {
-    "message": "{n} annotation(s) could not be located; UI skipped, records kept",
-    "description": "Toast shown after restore when some annotation targets are missing"
-  },
   "field_text": { "message": "Text content", "description": "Field label" },
   "field_font": { "message": "Font", "description": "Field label" },
   "field_font_size": { "message": "Font size", "description": "Field label" },
@@ -192,7 +188,6 @@
   "replace_url_placeholder": { "message": "Paste a URL", "description": "Replace media URL input placeholder" },
   "replace_confirm": { "message": "Replace", "description": "Replace media confirm button" },
   "replace_media_change": { "message": "Media source", "description": "Card change-row label for image/video replacement" },
-  "toast_media_unpersisted": { "message": "Large media replaced in memory only; won't survive a refresh", "description": "Toast when a replaced dataURL exceeds the persistence cap" },
   "region_note_placeholder": { "message": "Describe the region change…", "description": "Region annotation panel textarea placeholder" },
   "region_label": { "message": "Region", "description": "Region annotation type label in card meta" },
   "gran_narrow": { "message": "Narrow selection (child element)", "description": "Granularity capsule: shrink to child element" },

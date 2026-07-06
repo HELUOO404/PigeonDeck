@@ -5,7 +5,7 @@
    单击延迟协议：text/image/video 单击延迟 250ms（PanelManager.cancelPendingOpen 抢占）。
    触发 dblclick 时抢占待定 open，进入编辑/替换。
    编辑结束：blur/点外部/Esc → 提交 richText StyleChange → 撤销历史。
-   替换执行：记 replaceMedia StyleChange（cssProp='src'）→ 撤销历史 → dataURL 上限判定。
+   替换执行：记 replaceMedia StyleChange（cssProp='src'）→ 撤销历史。
    ============================================================ */
 
 import { Controller } from './controller';
@@ -13,12 +13,9 @@ import { AnnotationStore, mergeChanges, StyleChange } from '../state/annotations
 import { History } from '../state/history';
 import { Overlay } from './overlay';
 import { Settings } from '../state/settings';
-import { Toast } from './toast';
 import { PanelManager } from './panel';
 import { RichTextBar } from './inline-richtext';
 import { openReplaceMedia } from './replace-media';
-import { MAX_PERSIST_DATAURL } from '../state/session';
-import { t } from './i18n';
 import { buildSelector, classifyElement, getElementSummary } from '../shared/dom-utils';
 
 export class DirectEditManager {
@@ -27,7 +24,6 @@ export class DirectEditManager {
   private history: History;
   private panelLayer: HTMLElement;
   private panel: PanelManager;
-  private toast: Toast;
 
   /** 当前正在编辑的元素（null = 未在编辑） */
   private editEl: HTMLElement | null = null;
@@ -54,7 +50,6 @@ export class DirectEditManager {
     overlay: Overlay;
     panelLayer: HTMLElement;
     settings: Settings;
-    toast: Toast;
     panel: PanelManager;
   }) {
     this.controller = opts.controller;
@@ -62,7 +57,6 @@ export class DirectEditManager {
     this.history = opts.history;
     this.panelLayer = opts.panelLayer;
     this.panel = opts.panel;
-    this.toast = opts.toast;
     this.shadowHost = (opts.panelLayer.getRootNode() as ShadowRoot).host;
 
     window.addEventListener('dblclick', this.onDblClick, true);
@@ -339,18 +333,13 @@ export class DirectEditManager {
     });
   }
 
-  /** 执行替换：即时预览 + 记 replaceMedia StyleChange + 撤销历史 + dataURL 上限提示 */
+  /** 执行替换：即时预览 + 记 replaceMedia StyleChange + 撤销历史 */
   private applyReplace(el: HTMLElement, newSrc: string): void {
     const oldSrc = el.getAttribute('src') ?? '';
     if (newSrc === oldSrc) return;
 
     // 即时预览
     el.setAttribute('src', newSrc);
-
-    // 超大 dataURL：刷新不可恢复，提示
-    if (newSrc.startsWith('data:') && newSrc.length > MAX_PERSIST_DATAURL) {
-      this.toast.show(t('toast_media_unpersisted'));
-    }
 
     const selector = buildSelector(el);
     const existing = this.store.getBySelector(selector);

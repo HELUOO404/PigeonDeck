@@ -5,7 +5,7 @@
  * ② 单击出面板，填写保存后出现位号 + 标注框
  * ③ 点位号展开卡片，再点收起
  * ④ 右键位号出菜单，删除后 UI 消失，再建标注编号不复用
- * ⑤ 刷新后标注恢复
+ * ⑤ 刷新后标注不恢复（仅会话内存，刷新即清）
  * ⑥ 点击带 href 的链接元素不发生导航（拦截验证）
  *
  * 时序断言全部用轮询（waitForFunction / expect.poll），不用固定 sleep 断言视觉状态。
@@ -222,33 +222,27 @@ test('④ 右键位号出菜单，删除后 UI 消失，再建标注编号不复
   await page.close();
 });
 
-test('⑤ 刷新后标注恢复', async () => {
+test('⑤ 刷新后标注不恢复（仅会话内存）', async () => {
   const page = await openFixturePage();
   await expandToolbar(page);
-  await createAnnotation(page, '#btn-primary', '刷新后要还在');
+  await createAnnotation(page, '#btn-primary', '刷新后应消失');
 
-  // 等防抖写入 sessionStorage
-  await page.waitForFunction(
-    () => !!sessionStorage.getItem('pigeondeck:' + location.href)
-  );
+  // 位号 #1 已出现
+  await waitShadowVisible(page, '[data-testid="pd-pin"][data-number="1"]');
 
   await page.reload();
   await waitForExtensionInjected(page);
 
-  // 位号圆 #1 自动恢复（无需展开工具盘）
-  await waitShadowVisible(page, '[data-testid="pd-pin"][data-number="1"]');
-  await waitShadowVisible(page, '[data-testid="pd-markbox"][data-number="1"]');
-
-  // 卡片内容也恢复：点位号验证批注文本
-  await clickShadowEl(page, 'pd-pin');
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const host = document.getElementById('pd-host');
-        return host?.shadowRoot?.querySelector('[data-testid="pd-card-note"]')?.textContent;
-      })
-    )
-    .toBe('刷新后要还在');
+  // 刷新后不恢复：位号不再出现（标注只活在本 tab 会话内存里）
+  await waitShadowGone(page, '[data-testid="pd-pin"]');
+  // 展开工具盘后仍为空（无残留标注）
+  await expandToolbar(page);
+  expect(
+    await page.evaluate(() => {
+      const host = document.getElementById('pd-host');
+      return host?.shadowRoot?.querySelectorAll('[data-testid="pd-pin"]').length ?? -1;
+    })
+  ).toBe(0);
 
   await page.close();
 });
@@ -345,6 +339,21 @@ test('⑩ 批注模式右键空白处关闭面板（不报错）', async () => {
   await page.mouse.click(6, 6, { button: 'right' });
   await waitShadowGone(page, '[data-testid="pd-panel"]');
   expect(errors).toEqual([]);
+
+  await page.close();
+});
+
+test('⑪ 指针离开文档 → hover 金框清除', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+
+  const box = (await page.locator('#btn-primary').boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await waitShadowVisible(page, '[data-testid="pd-hover"]');
+
+  // 派发 document mouseleave（指针离开视口）→ hover 清除
+  await page.evaluate(() => document.dispatchEvent(new MouseEvent('mouseleave')));
+  await expect.poll(() => isShadowElVisible(page, 'pd-hover')).toBe(false);
 
   await page.close();
 });
