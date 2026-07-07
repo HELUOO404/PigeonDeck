@@ -27,20 +27,10 @@ import { SettingsManager } from './settings-panel';
 import { setupShortcuts } from './shortcuts';
 import { initEscStack } from './esc-stack';
 import { closeAllPopovers } from './popover';
+import { applyTheme, setThemeHost } from './theme';
 
 // 防重复注入标记
 const HOST_ID = 'pd-host';
-
-type Theme = 'light' | 'dark';
-
-let _shadowRoot: ShadowRoot | null = null;
-
-/** 切换亮/暗主题 */
-export function setTheme(theme: Theme): void {
-  if (_shadowRoot) {
-    (_shadowRoot.host as HTMLElement).setAttribute('data-theme', theme);
-  }
-}
 
 function inject(settings: Settings): void {
   // 防重复注入
@@ -56,7 +46,8 @@ function inject(settings: Settings): void {
   // 宿主元素
   const host = document.createElement('div');
   host.id = HOST_ID;
-  host.setAttribute('data-theme', settings.theme);
+  applyTheme(host, settings.theme);
+  setThemeHost(host);
   Object.assign(host.style, {
     position: 'fixed',
     zIndex: '2147483647',
@@ -74,7 +65,6 @@ function inject(settings: Settings): void {
 
   // Shadow Root
   const shadow = host.attachShadow({ mode: 'open' });
-  _shadowRoot = shadow;
 
   // 注入样式
   const style = document.createElement('style');

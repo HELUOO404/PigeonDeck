@@ -12,7 +12,7 @@ import { Overlay } from './overlay';
 import { History } from '../state/history';
 import { SelectionResolver } from './selection';
 import { Toast } from './toast';
-import { setTheme } from './main';
+import { setTheme } from './theme';
 import { t, getLocale, setLocale } from './i18n';
 import { openLanguagePicker } from './language-picker';
 import { openDropdown } from './dropdown';
