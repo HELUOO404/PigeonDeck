@@ -9,7 +9,6 @@
 
 import { t } from './i18n';
 import type { StyleChange } from '../state/annotations';
-import type { ElementType } from '../shared/dom-utils';
 import { openDropdown, sampleAncestorValues, primaryFontFamily, DropdownItem } from './dropdown';
 import { formatCssColor, openColorPicker, parseCssColor } from './color-picker';
 import { bindPopoverToggle } from './popover';
@@ -24,6 +23,9 @@ import {
   shadowColorOf,
   shadowCss,
 } from './field-values';
+import type { FieldRow } from './field-layout';
+export { FIELD_CATEGORY, advancedRows, modbarRows, modbarTitleKey } from './field-layout';
+export type { AdvCategory, FieldRow } from './field-layout';
 
 /* ---- 图标（Lucide，与 preview/pigeon-components.js 单一真相源一致） ---- */
 const I = {
@@ -493,43 +495,6 @@ export const FIELD_DEFS: Record<string, FieldDef> = {
     read: () => '',
     cssValue: (v) => v,
   },
-};
-
-/** 分类归属（高级样式导航变更角标计数用） */
-export const FIELD_CATEGORY: Record<string, 'typography' | 'size' | 'appearance'> = {
-  text: 'typography',
-  font: 'typography',
-  fontSize: 'typography',
-  fontWeight: 'typography',
-  color: 'typography',
-  align: 'typography',
-  decoration: 'typography',
-  fontStyle: 'typography',
-  textDecoration: 'typography',
-  lineHeight: 'typography',
-  letter: 'typography',
-  listStyle: 'typography',
-  transform: 'typography',
-  margin: 'typography',
-  padding: 'typography',
-  width: 'size',
-  height: 'size',
-  minW: 'size',
-  maxW: 'size',
-  display: 'size',
-  overflow: 'size',
-  bgColor: 'appearance',
-  bgImage: 'appearance',
-  border: 'appearance',
-  borderColor: 'appearance',
-  radius: 'appearance',
-  shadow: 'appearance',
-  shadowColor: 'appearance',
-  opacity: 'appearance',
-  blur: 'appearance',
-  fill: 'appearance',
-  stroke: 'appearance',
-  strokeWidth: 'appearance',
 };
 
 /* ============================================================
@@ -1091,40 +1056,6 @@ export function createPropRow(
    Row = 一行的 key 列表（2 个 = grid2 并排）
    ============================================================ */
 
-export type FieldRow = string[];
-
-/** 修改栏标题 i18n key */
-export function modbarTitleKey(type: ElementType): string {
-  switch (type) {
-    case 'text':
-      return 'modbar_text';
-    case 'image':
-      return 'modbar_image';
-    case 'video':
-      return 'modbar_video';
-    case 'button':
-    case 'container':
-      return 'modbar_box';
-    default:
-      return 'modbar_auto';
-  }
-}
-
-/** 修改栏字段布局（按元素类型智能切换；other 走 autoModbarRows） */
-export function modbarRows(type: ElementType): FieldRow[] {
-  switch (type) {
-    case 'text':
-      return [['text'], ['fontSize', 'fontWeight'], ['color'], ['align']];
-    case 'image':
-    case 'video':
-      return [['replaceImg'], ['width', 'height'], ['radius', 'border']];
-    case 'button':
-    case 'container':
-      return [['bgColor'], ['radius', 'border'], ['shadow'], ['opacity'], ['margin', 'padding']];
-    default:
-      return [];
-  }
-}
 
 /** 陌生元素：按 computed style 动态列出最相关控件（前 4，带「自动」角标） */
 export function autoModbarRows(target: HTMLElement): FieldRow[] {
@@ -1179,39 +1110,6 @@ function packAutoRows(picked: string[]): FieldRow[] {
   return rows;
 }
 
-export type AdvCategory = 'typography' | 'size' | 'appearance' | 'debug';
-
-/** 高级样式分类字段布局（preview parts 20/21/12；调试分类为只读 readout 不在此列） */
-export function advancedRows(category: AdvCategory): FieldRow[] {
-  switch (category) {
-    case 'typography':
-      return [
-        ['font'],
-        ['fontSize', 'fontWeight'],
-        ['color'],
-        ['align'],
-        ['decoration'],
-        ['lineHeight', 'letter'],
-        ['listStyle', 'transform'],
-        ['margin', 'padding'],
-      ];
-    case 'size':
-      return [['width', 'height'], ['minW', 'maxW'], ['display'], ['overflow']];
-    case 'appearance':
-      return [
-        ['bgColor'],
-        ['bgImage'],
-        ['border', 'radius'],
-        ['borderColor'],
-        ['shadow'],
-        ['shadowColor'],
-        ['opacity'],
-        ['blur'],
-      ];
-    default:
-      return [];
-  }
-}
 
 /** 把一组行布局渲染进容器（单行直接 .prop；双列包 .prop.grid2） */
 export function renderRows(
