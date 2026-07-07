@@ -243,15 +243,23 @@ export function makeDraggableByHandle(
   onDrag?: (left: number, top: number) => void
 ): () => void {
   let start: { mx: number; my: number; left: number; top: number } | null = null;
+  let dragged = false;
   const onDown = (ev: PointerEvent): void => {
     // 落在交互子元素上的按下交给该控件（不起拖）
     if ((ev.target as Element | null)?.closest('button, input, textarea, select, a')) return;
     ev.preventDefault();
     handleEl.setPointerCapture(ev.pointerId);
+    dragged = false;
     start = { mx: ev.clientX, my: ev.clientY, left: panelEl.offsetLeft, top: panelEl.offsetTop };
   };
   const onMove = (ev: PointerEvent): void => {
     if (!start) return;
+    // 拖拽真正开始（首次移动）：关闭本面板派生的浮层（下拉/调色盘/语言选择器）——
+    // 拖动面板时它们仍锚在旧位置会错位/悬空（INVARIANT 2）。面板本身非浮层，不受影响。
+    if (!dragged) {
+      dragged = true;
+      closeAllPopovers();
+    }
     const left = start.left + (ev.clientX - start.mx);
     const top = start.top + (ev.clientY - start.my);
     panelEl.style.left = `${left}px`;
