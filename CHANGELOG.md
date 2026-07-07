@@ -11,6 +11,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Bugfix — 7.6.2 用户反馈第三轮（2026-07-07）
+
+第二轮后的复冒烟反馈：几处上一轮未真正落地（取色器仍卡死、动画未生效、高级样式改错）+ 一批交互约定要求固化，勿再逐条提醒。基线：build ✓ / typecheck ✓ / vitest 385 ✓ / 全量 E2E 105 passed ✓ / i18n ✓。**并把交互不变量固化到 [docs/conventions/interaction-invariants.md](docs/conventions/interaction-invariants.md)（INDEX + CLAUDE 指针）。**
+
+- **CRIT 取色器仍卡死·硬加固 R1（844d8f7）**：上轮 F18 判断错向（挂起拦截无用——症状「颜色变了再卡死」说明取点成功、原生遮罩已关一次）。真因锁定：挂起期取点的落点点击**穿透**到 6 个取色按钮之一 → 二次 `EyeDropper.open()` → 原生遮罩重新占据全屏输入（连浏览器关闭键都点不了）。加固：**模块级再入守卫**（同一时刻只允许一个 EyeDropper 挂起）+ 挂起期**禁用所有取色按钮指针命中** + `open()` 构造 try/catch；并把 `FieldsSession.notify` 改为**遍历监听器快照**（消除「通知中增删监听器致重入死循环」的顽固隐患）。⚠️ 原生取色器无法自动化，须真机复验。
+- **交互不变量 1–4 R3+R4（ce8a4c3, e866af2, 8c31f34）**：① 浮层触发钮统一 `bindPopoverToggle`——**再点即关，杜绝叠开**（原设置语言选择器可叠开多层）；② **拖拽面板即 `closeAllPopovers`** 关其派生浮层；③ **拖拽工具盘**（越阈值）关设置/复制文本/复制图片/清空确认 + 所有浮层，**但不关**批注/移动/区域内容面板；④ 全部编辑面 **Ctrl/Cmd+Enter 保存 · Esc 不保存退出**（补齐复制文本可编辑预览的提交键）。
+- **重新选中已标注元素 R5（494e133）**：选中已标注元素时**隐藏其持久标注框/位号**（改出八句柄框 + 预填卡片，避免双框重叠），关闭时恢复；`Overlay.setSuppressedMark()` 强制（先前预填已工作，本次补掉双框）。
+- **高级样式回退重做 R7（635e787）**：回退上轮把调试计算样式并入单滚动的错误改动——**恢复调试页计算样式内层滚动 + 原尺寸**；各高级样式子分类面板**统一等高**（对齐调试页长度 300px，切页不跳高）；滚动条留隙。
+- **打印隐藏 UI R2（50af025）**：打印页面时扩展浮动 UI 不再留印子——向页面 `document.head` 注入 `@media print { #pd-host { display:none !important } }`。
+- **动画真正生效 R6（045a276）**：根因——`animateHeight` 设 `height:auto` 后**同步** `positionPanel()` 读 `offsetHeight` 强制回流，起终值合并到同一帧、过渡从不触发（上轮 F20 动画看不到）。改**可靠 FLIP**：量 h0→变更→量 h1→显式 h0px 起点→下一帧 h1px 终点→`transitionend`/280ms 兜底后清回自然高度并重定位（显式 px→px 不依赖 interpolate-size；代际标记防旧轮作废）；`.panel` 加淡入进入动画。
+- **交互不变量固化 R8（61ea914）**：新增 [docs/conventions/interaction-invariants.md](docs/conventions/interaction-invariants.md)（11 条：层级/hover 抑制/浮层再点即关+Esc 分层/拖拽关闭/编辑面按键/顶栏拖动/工具盘 tooltip·光标·焦点/导出不自动化/打印/动画/仅会话内存），INDEX + CLAUDE.md「改 UI 前必读」指针。
+
 ### Bugfix — 7.6.1 用户反馈第二轮（2026-07-07）
 
 真机第二轮反馈（约 25 条）。先并行 3 个 Explore 子代理映射到 file:line + 1 个子代理对富文本做第一性原理对抗式审查，再拆组实施（关键路径/删除先行 → 共享件 → 工具盘/面板/设置/导出顺序推进 → 富文本重写 → 图标）。**用户拍板决策（AskUserQuestion）**：图片单击预览=页内灯箱；富文本=彻底重做（结构化可导出变更）；跨页面/刷新保留=彻底删除。基线：build ✓ / typecheck ✓ / vitest 374 ✓ / 全量 E2E 102 passed ✓ / i18n ✓（`copy-text②`、`full-flow` 剪贴板**读**断言本机 headed 环境失败，与上轮同为已知环境限制，非回归）。
