@@ -70,6 +70,16 @@ async function shadowTestIdExists(page: Page, testId: string): Promise<boolean> 
   }, testId);
 }
 
+/** Shadow DOM 内某 testid 元素当前是否可见（存在且 display≠none；标注框常驻 DOM，靠 display 切换） */
+async function shadowTestIdVisible(page: Page, testId: string): Promise<boolean> {
+  return page.evaluate((id: string) => {
+    const el = document
+      .getElementById('pd-host')
+      ?.shadowRoot?.querySelector<HTMLElement>(`[data-testid="${id}"]`);
+    return !!el && getComputedStyle(el).display !== 'none';
+  }, testId);
+}
+
 /** 滚动 #deco-strip 到视口上部并返回其中心视口坐标（留出下方空间给面板/拖拽） */
 async function scrollDecoIntoView(page: Page): Promise<{ cx: number; cy: number }> {
   await page.evaluate(() => {
@@ -217,6 +227,61 @@ test('③  点击已有标注的元素 → 面板重开且选中框再次出现'
     .poll(() => shadowTestIdExists(page, 'pd-selbox'), {
       timeout: 5000,
       message: 'selbox should reappear when clicking an already-annotated element',
+    })
+    .toBe(true);
+
+  await page.close();
+});
+
+test('④  重新选中已标注元素 → 面板预填原说明 + 持久标注框隐藏，关面板后恢复（R5）', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+
+  const c = await scrollDecoIntoView(page);
+
+  // 建一条带说明的标注 → 保存后持久标注框 + 位号出现
+  await page.mouse.click(c.cx, c.cy);
+  await waitShadowTestId(page, 'pd-panel');
+  await page.keyboard.type('R5 原有说明');
+  await clickShadowEl(page, 'pd-panel-save');
+  await waitShadowTestId(page, 'pd-pin');
+  await expect.poll(() => shadowTestIdVisible(page, 'pd-markbox'), { timeout: 5000 }).toBe(true);
+
+  // 重新单击该（已标注）元素 → 面板重开
+  await page.mouse.click(c.cx, c.cy);
+  await waitShadowTestId(page, 'pd-panel');
+
+  // 面板预填原有说明（并入同一标注编辑，非空白新面板）
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const el = document
+            .getElementById('pd-host')
+            ?.shadowRoot?.querySelector<HTMLTextAreaElement>('[data-testid="pd-panel-note"]');
+          return el?.value ?? null;
+        }),
+      { timeout: 5000, message: 'panel note should be pre-filled with the prior note' }
+    )
+    .toBe('R5 原有说明');
+
+  // 八句柄选中框出现，而持久标注框 + 位号被抑制（不与选中框重叠成双框）
+  await expect.poll(() => shadowTestIdExists(page, 'pd-selbox'), { timeout: 5000 }).toBe(true);
+  await expect
+    .poll(() => shadowTestIdVisible(page, 'pd-markbox'), {
+      timeout: 5000,
+      message: 'persistent markbox should be hidden while re-selected',
+    })
+    .toBe(false);
+  await expect.poll(() => shadowTestIdVisible(page, 'pd-pin'), { timeout: 5000 }).toBe(false);
+
+  // 关面板（取消）→ 选中框消失、持久标注框恢复（Esc / 点外部同经 closePanel 同一恢复点）
+  await clickShadowEl(page, 'pd-btn-cancel');
+  await expect.poll(() => shadowTestIdExists(page, 'pd-selbox'), { timeout: 5000 }).toBe(false);
+  await expect
+    .poll(() => shadowTestIdVisible(page, 'pd-markbox'), {
+      timeout: 5000,
+      message: 'persistent markbox should reappear after closing the panel',
     })
     .toBe(true);
 

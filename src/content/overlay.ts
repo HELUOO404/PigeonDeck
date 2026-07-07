@@ -54,6 +54,9 @@ export class Overlay {
 
   // 标注 UI
   private entries: Map<string, MarkEntry> = new Map();
+  /** 被抑制持久标注框/位号的标注 id（R5）：该标注正被单击选中编辑时置为其 id，
+      refresh 跳过绘制它自己的框/位号，避免与八句柄选中框重叠成双框；null = 无抑制。 */
+  private suppressedMarkId: string | null = null;
 
   // 跟随机制
   private rafId: number | null = null;
@@ -152,6 +155,17 @@ export class Overlay {
   /** 注入「批注模式当前选中元素」取值器（main.ts 在 PanelManager 建好后调用，F6）。 */
   setSelectedGetter(getter: () => Element | null): void {
     this.getSelected = getter;
+  }
+
+  /**
+   * 抑制/恢复某条标注自己的持久标注框 + 位号（R5，PanelManager 在打开/关闭面板时调用）。
+   * 单击已标注元素重新选中它时，面板 + 八句柄选中框会出现；此时隐藏该标注自己的持久框，
+   * 避免持久框与选中框重叠成双框（其余标注的框照常）。传 null 恢复（面板关闭/切换选中时）。
+   */
+  setSuppressedMark(id: string | null): void {
+    if (this.suppressedMarkId === id) return;
+    this.suppressedMarkId = id;
+    this.scheduleRefresh();
   }
 
   /** 未能定位目标元素的标注数（恢复后轻提示用）；区域标注始终可定位，不计入 */
@@ -425,6 +439,14 @@ export class Overlay {
 
   private refresh(): void {
     for (const entry of this.entries.values()) {
+      // R5：该标注正被选中编辑（面板 + 八句柄框已出现）→ 隐藏它自己的持久框/位号，
+      // 避免与选中框重叠成双框；恢复由 setSuppressedMark(null) 触发下一次 refresh 重画。
+      if (entry.annotation.id === this.suppressedMarkId) {
+        entry.markbox.style.display = 'none';
+        entry.pin.style.display = 'none';
+        continue;
+      }
+
       if (entry.isRegion) {
         // 区域标注：按 docRect − 视口偏移重定位，始终可见。
         // 视口偏移含嵌套滚动容器增量，故内层容器滚动时框也跟随。

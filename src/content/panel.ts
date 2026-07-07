@@ -763,6 +763,10 @@ export class PanelManager {
     this.panelTarget = target;
     this.panelExisting = existing;
 
+    // R5：选中已有标注重新编辑时，隐藏它自己的持久标注框/位号，避免与八句柄选中框
+    // 重叠成双框（此处只抑制这一条，其余标注的框照常）。closePanel 恢复。
+    this.overlay.setSuppressedMark(existing ? existing.id : null);
+
     // 交互式选中框随面板出现（元素目标；区域批注不走 openPanel 故无框）。
     // 句柄缩放直接改该元素尺寸 → 并入标注 + 撤销历史。
     if (target instanceof HTMLElement) {
@@ -788,7 +792,12 @@ export class PanelManager {
   private onSelboxResize = (el: HTMLElement): void => {
     if (this.panelEl && this.panelTarget === el) {
       const fresh = this.store.getBySelector(buildSelector(el));
-      if (fresh) this.panelExisting = fresh;
+      if (fresh) {
+        this.panelExisting = fresh;
+        // R5：句柄缩放刚为该元素新建/命中标注 → 面板仍开着，随即抑制其持久框，
+        // 避免与选中框重叠成双框（新鲜单击未标注元素后缩放的场景）。
+        this.overlay.setSuppressedMark(fresh.id);
+      }
     }
   };
 
@@ -1028,6 +1037,8 @@ export class PanelManager {
     this.escPop = undefined;
     closeAllPopovers();
     this.selbox.clear();
+    // R5：恢复被抑制的持久标注框/位号（选中结束 → 双框风险消失）。
+    this.overlay.setSuppressedMark(null);
     // 未保存 → 回滚本次会话的预览改动
     if (this.session && !this.panelCommitted) {
       this.session.rollback();
