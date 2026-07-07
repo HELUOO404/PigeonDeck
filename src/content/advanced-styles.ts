@@ -92,7 +92,7 @@ export function createAdvancedBox(opts: AdvancedBoxOptions): HTMLElement {
   nav.className = 'pd-nav';
   nav.setAttribute('data-testid', 'pd-adv-nav');
   const scon = document.createElement('div');
-  scon.className = 'scon';
+  scon.className = 'scon pd-scroll';
   box.appendChild(nav);
   box.appendChild(scon);
 
@@ -218,8 +218,7 @@ function buildDebugReadout(target: HTMLElement, translated: boolean): HTMLElemen
   grp.appendChild(csH);
 
   const list = document.createElement('div');
-  // F17：不再是内嵌滚动框，只作列表容器（滚动交给面板主体 .pbody.pd-scroll）
-  list.className = 'cslist';
+  list.className = 'cslist pd-scroll';
   const cs = target.ownerDocument.defaultView!.getComputedStyle(target);
   for (const item of CS_PROPS) {
     let value: string;

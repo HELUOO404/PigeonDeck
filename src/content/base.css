@@ -1082,6 +1082,10 @@
 
 /* 内容列（高级样式右侧） */
 .scon { flex: 1; min-width: 0; }
+/* R7：固定内容列高度 → 排版/尺寸/外观/调试各分类面板总高一致（切分类不改面板高度；
+   短分类留白、长分类在列内滚动），取值覆盖调试分类的自然长度（导航含翻译按钮时最高 ≈297px）；
+   padding-right 让滚动条与内容间留出间隙。对齐设置面板 .sbody .scon 的 F2/F15 固定滚动区做法。 */
+.advbox .scon { height: 300px; overflow: auto; padding-right: 8px; }
 
 /* 自动适配说明条（陌生元素） */
 .autonote {
@@ -1237,8 +1241,7 @@
 .kv .v { color: var(--ctx); font-variant-numeric: tabular-nums; text-align: right; word-break: break-all; }
 .kv .v code { font: 11px ui-monospace,Consolas,monospace; color: var(--c1); }
 .csgrp { margin-top: 11px; }
-/* F17：调试计算样式列表随面板单一滚动区（.pbody.pd-scroll）整体流动，不再内嵌独立滚动框 */
-.cslist { border-top: 1px solid var(--cbd); padding-top: 6px; }
+.cslist { max-height: 150px; overflow: auto; border-top: 1px solid var(--cbd); padding-top: 6px; }
 .csrow { display: flex; justify-content: space-between; gap: 10px; font: 11px ui-monospace,Consolas,monospace; padding: 3px 0; }
 .csrow .p { color: var(--ctx2); }
 .csrow .val { color: var(--ctx); }
