@@ -216,19 +216,49 @@ interface OpenCard {
   connector: SVGSVGElement | null;
 }
 
+/** 高度过渡代际标记：同元素被新一轮动画接管时，旧一轮的 rAF/收尾一律作废 */
+const heightAnimGen = new WeakMap<HTMLElement, number>();
+
 /**
- * 元素高度柔和过渡（design-system §1.5 例外条款）：
- * 快照旧高 → 变更内容 → 设回旧高强制回流 → height:auto，
- * 由 interpolate-size: allow-keywords 完成 px→auto 的过渡（面板与卡片共用）。
- * after 在设回 auto 后回调（用于重定位）。
+ * 元素高度柔和过渡（design-system §1.5 例外条款）——可靠 FLIP：
+ * 快照旧高 h0 → 变更内容 → 量新高 h1 → 显式 h0px 起点（回流提交）→ 下一帧起 h1px 显式终点，
+ * 走 `.panel/.acard { transition: height }` 的 190ms 过渡；过渡结束（或 280ms 兜底）后清回
+ * 自然高度并调用 after（重定位）。用显式 px→px 而非 px→auto，且把 after 推迟到过渡结束——
+ * 旧实现设 height:auto 后同步 positionPanel() 读 offsetHeight 强制回流，起终值被合并到同一帧、
+ * 过渡从不触发（这是上一轮动画“看不到”的根因）。
+ * after 在过渡结束后回调（用于重定位）。h0===h1（含 jsdom offsetHeight=0）时直接跳过动画。
  */
 function animateHeight(el: HTMLElement, mutate: () => void, after?: () => void): void {
   const h0 = el.offsetHeight;
   mutate();
-  el.style.height = `${h0}px`;
-  void el.offsetHeight; // 强制回流，确保过渡起点生效
   el.style.height = 'auto';
-  after?.();
+  const h1 = el.offsetHeight;
+  if (h0 === h1) {
+    el.style.height = '';
+    after?.();
+    return;
+  }
+  const gen = (heightAnimGen.get(el) ?? 0) + 1;
+  heightAnimGen.set(el, gen);
+  el.style.height = `${h0}px`;
+  void el.offsetHeight; // 提交起点高度
+  requestAnimationFrame(() => {
+    if (heightAnimGen.get(el) !== gen) return; // 被新一轮接管
+    el.style.height = `${h1}px`;
+    let done = false;
+    const finish = (): void => {
+      if (done || heightAnimGen.get(el) !== gen) return;
+      done = true;
+      el.removeEventListener('transitionend', onEnd);
+      el.style.height = ''; // 清回自然高度（auto）
+      after?.();
+    };
+    const onEnd = (ev: TransitionEvent): void => {
+      if (ev.target === el && ev.propertyName === 'height') finish();
+    };
+    el.addEventListener('transitionend', onEnd);
+    setTimeout(finish, 280); // transitionend 未触发（缩减动效/被打断）时的兜底
+  });
 }
 
 /**
