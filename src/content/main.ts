@@ -65,6 +65,13 @@ function inject(settings: Settings): void {
   });
   document.documentElement.appendChild(host);
 
+  // R2：打印时隐藏宿主 → 所有 Shadow UI 从页面打印输出中消失。
+  // 注入到「页面」document.head（非 Shadow 样式表）：须隐藏宿主元素本身，
+  // 仅 @media print 生效，对屏幕显示零影响。inject() 有防重复守卫，只注入一次。
+  const printStyle = document.createElement('style');
+  printStyle.textContent = `@media print { #${HOST_ID} { display: none !important; } }`;
+  (document.head ?? document.documentElement).appendChild(printStyle);
+
   // Shadow Root
   const shadow = host.attachShadow({ mode: 'open' });
   _shadowRoot = shadow;
