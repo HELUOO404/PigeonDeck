@@ -59,7 +59,7 @@ export async function pickColor(root: HTMLElement): Promise<string | null> {
 
     // 截图铺满视口 = 视觉上冻结当前画面（与拾取像素严格同源）
     const shot = document.createElement('img');
-    shot.className = 'shot';
+    shot.className = 'ed-shot';
     shot.src = dataUrl;
     shot.draggable = false;
     overlay.appendChild(shot);

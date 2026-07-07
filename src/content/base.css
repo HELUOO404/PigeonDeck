@@ -1618,7 +1618,7 @@
   pointer-events: auto;
   cursor: crosshair;
 }
-.pd-eyedropper .shot {
+.pd-eyedropper .ed-shot {
   position: fixed;
   inset: 0;
   width: 100vw;
