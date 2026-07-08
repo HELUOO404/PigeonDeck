@@ -158,6 +158,28 @@ function itemsToRects(items: OverlayItem[]): DocRect[] {
 
 // ---- Canvas 叠加绘制（有 canvas 依赖，不单测；坐标换算复用 layoutOverlay） ----
 
+/**
+ * 纯函数：计算箭头两翼端点（从 (sx,sy) 指向 (ex,ey)，箭头头部在终点）。
+ * @param sx/sy 起点坐标
+ * @param ex/ey 终点坐标（箭头尖端）
+ * @param headLen 箭头翼长（px）
+ * @returns [翼1, 翼2] 两个端点坐标
+ */
+export function computeArrowHead(
+  sx: number,
+  sy: number,
+  ex: number,
+  ey: number,
+  headLen: number
+): [{ x: number; y: number }, { x: number; y: number }] {
+  const angle = Math.atan2(ey - sy, ex - sx);
+  const spread = Math.PI / 6; // 30° 展开角
+  return [
+    { x: ex - headLen * Math.cos(angle - spread), y: ey - headLen * Math.sin(angle - spread) },
+    { x: ex - headLen * Math.cos(angle + spread), y: ey - headLen * Math.sin(angle + spread) },
+  ];
+}
+
 /** 邮政金（pigeonlib --c1 亮色值，截图为页面故用亮色） */
 const GOLD = '#b8842c';
 const GOLD_SOFT = 'rgba(184,132,44,0.12)';
@@ -228,26 +250,52 @@ export function drawOverlays(
       ctx.fill();
     }
 
-    // 移动预览：幽灵框（最终位置）+ 连线（源框中心 → 幽灵框中心）
+    // 移动预览：实心箭头（原位中心 → 终位中心），白晕保可读性
     if (item.ghost) {
       const ghost = layoutOverlay(item.ghost, range, MARK_INSET);
-      // 连线（虚线）先画，压在框下
-      ctx.save();
-      ctx.setLineDash([3, 3]);
-      ctx.lineWidth = 1.2;
-      ctx.strokeStyle = GOLD;
-      ctx.beginPath();
-      ctx.moveTo(layout.box.x + layout.box.w / 2, layout.box.y + layout.box.h / 2);
-      ctx.lineTo(ghost.box.x + ghost.box.w / 2, ghost.box.y + ghost.box.h / 2);
-      ctx.stroke();
-      ctx.restore();
-      // 幽灵框轮廓
-      ctx.save();
-      ctx.strokeStyle = GOLD;
-      ctx.lineWidth = 1.5;
-      roundRectPath(ctx, ghost.box.x, ghost.box.y, ghost.box.w, ghost.box.h, 6);
-      ctx.stroke();
-      ctx.restore();
+      const arrowSx = layout.box.x + layout.box.w / 2;
+      const arrowSy = layout.box.y + layout.box.h / 2;
+      const arrowEx = ghost.box.x + ghost.box.w / 2;
+      const arrowEy = ghost.box.y + ghost.box.h / 2;
+      if (arrowSx !== arrowEx || arrowSy !== arrowEy) {
+        const ARROW_HEAD_LEN = 11;
+        const [w1, w2] = computeArrowHead(arrowSx, arrowSy, arrowEx, arrowEy, ARROW_HEAD_LEN);
+        // 白晕（最下层，保证对任意背景可读）
+        ctx.save();
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 4;
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(arrowSx, arrowSy);
+        ctx.lineTo(arrowEx, arrowEy);
+        ctx.stroke();
+        ctx.restore();
+        // 金色实线
+        ctx.save();
+        ctx.strokeStyle = GOLD;
+        ctx.lineWidth = 2;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(arrowSx, arrowSy);
+        ctx.lineTo(arrowEx, arrowEy);
+        ctx.stroke();
+        ctx.restore();
+        // 实心箭头头部（+ 白晕描边）
+        ctx.save();
+        ctx.fillStyle = GOLD;
+        ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+        ctx.lineWidth = 1.5;
+        ctx.lineJoin = 'round';
+        ctx.beginPath();
+        ctx.moveTo(arrowEx, arrowEy);
+        ctx.lineTo(w1.x, w1.y);
+        ctx.lineTo(w2.x, w2.y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.restore();
+      }
     }
 
     // 标注框 / 区域框描边
@@ -466,6 +514,8 @@ export async function captureStitched(range: CaptureRange): Promise<HTMLCanvasEl
 
     const viewportH = window.innerHeight;
     const dpr = window.devicePixelRatio || 1;
+    // 记录水平滚动偏移（仅竖向滚动截图，scrollX 不变；用于 drawImage 的 dstX 定位）
+    const captureScrollX = window.scrollX;
     const screens = planScreens(range.top, range.height, viewportH);
 
     if (screens.length === 0) {
@@ -510,11 +560,15 @@ export async function captureStitched(range: CaptureRange): Promise<HTMLCanvasEl
       // 源矩形（物理像素）
       const srcY = (overlapTop - scrollY) * dpr;
       const srcH = (overlapBottom - overlapTop) * dpr;
-      // 目标矩形（CSS 像素 = 画布尺寸）
+      // 目标矩形（CSS 像素）：
+      //   dstX = captureScrollX：截图从 viewport 左缘开始，= 文档 X 坐标 scrollX，
+      //          与叠加层 "canvas X = 文档 X" 保持一致。
+      //   dstW = img.naturalWidth / dpr：以截图自然 CSS 宽度绘制，避免宽文档时横向拉伸。
       const dstY = overlapTop - range.top;
       const dstH = overlapBottom - overlapTop;
+      const dstW = img.naturalWidth / dpr; // viewport 宽度（CSS px），= window.innerWidth
 
-      ctx.drawImage(img, 0, srcY, img.naturalWidth, srcH, 0, dstY, range.width, dstH);
+      ctx.drawImage(img, 0, srcY, img.naturalWidth, srcH, captureScrollX, dstY, dstW, dstH);
     }
 
     return canvas;

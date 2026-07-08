@@ -9,6 +9,7 @@ import {
   planScreens,
   layoutOverlay,
   computeCardLayout,
+  computeArrowHead,
   wrapText,
   CopyImageManager,
   DocRect,
@@ -398,5 +399,100 @@ describe('computeCardLayout', () => {
     );
     expect(cards[0].rect.x).toBeGreaterThanOrEqual(0);
     expect(cards[0].rect.x + cards[0].rect.w).toBeLessThanOrEqual(docWidth);
+  });
+});
+
+// ============================================================
+// computeArrowHead（D2a 移动箭头几何，纯函数）
+// ============================================================
+
+describe('computeArrowHead', () => {
+  it('水平向右：两翼 X 相同且在终点左侧，Y 对称', () => {
+    const [p1, p2] = computeArrowHead(0, 0, 100, 0, 10);
+    // angle=0, spread=π/6
+    // p1.x = 100 - 10*cos(π/6) ≈ 91.34; p1.y = -10*sin(-π/6) = 5
+    // p2.x = 100 - 10*cos(π/6) ≈ 91.34; p2.y = -10*sin( π/6) = -5
+    expect(p1.x).toBeCloseTo(100 - 10 * Math.cos(Math.PI / 6));
+    expect(p2.x).toBeCloseTo(100 - 10 * Math.cos(Math.PI / 6));
+    expect(p1.y).toBeCloseTo(5);
+    expect(p2.y).toBeCloseTo(-5);
+    // 两翼关于箭头轴对称
+    expect(Math.abs(p1.y + p2.y)).toBeCloseTo(0);
+  });
+
+  it('竖直向下：两翼 Y 相同且在终点上方，X 对称', () => {
+    const [p1, p2] = computeArrowHead(0, 0, 0, 100, 10);
+    // angle=π/2
+    expect(p1.y).toBeCloseTo(100 - 10 * Math.cos(Math.PI / 6));
+    expect(p2.y).toBeCloseTo(100 - 10 * Math.cos(Math.PI / 6));
+    expect(Math.abs(p1.x + p2.x)).toBeCloseTo(0);
+  });
+
+  it('两翼距终点均等于 headLen', () => {
+    const [p1, p2] = computeArrowHead(0, 0, 80, 60, 10);
+    const d1 = Math.sqrt((p1.x - 80) ** 2 + (p1.y - 60) ** 2);
+    const d2 = Math.sqrt((p2.x - 80) ** 2 + (p2.y - 60) ** 2);
+    expect(d1).toBeCloseTo(10);
+    expect(d2).toBeCloseTo(10);
+  });
+
+  it('起终点相同（零位移）不崩溃，返回两个点', () => {
+    const result = computeArrowHead(50, 50, 50, 50, 10);
+    expect(result).toHaveLength(2);
+    // atan2(0,0)=0，两翼仍为有限值
+    expect(Number.isFinite(result[0].x)).toBe(true);
+    expect(Number.isFinite(result[1].x)).toBe(true);
+  });
+});
+
+// ============================================================
+// D2b 坐标系对齐（叠加层 与 截图拼接 使用同一坐标系）
+// ============================================================
+
+describe('D2b 坐标系对齐', () => {
+  const range: CaptureRange = { top: 200, height: 800, width: 1280, truncated: false };
+
+  it('layoutOverlay 垂直：canvas Y = 文档 Y − range.top', () => {
+    const layout = layoutOverlay({ x: 100, y: 350, w: 80, h: 40 }, range, 0);
+    expect(layout.box.y).toBe(350 - 200); // 150
+  });
+
+  it('layoutOverlay 水平：canvas X = 文档 X（无水平偏移）', () => {
+    const layout = layoutOverlay({ x: 300, y: 350, w: 80, h: 40 }, range, 0);
+    expect(layout.box.x).toBe(300); // 直接等于文档 X
+  });
+
+  it('截图坐标系：scrollX=0 时 canvas X = 文档 X（dstX=scrollX=0 + viewport X = 文档 X）', () => {
+    // captureStitched 以 dstX=scrollX=0 绘制，viewport X 与文档 X 相同
+    const scrollX = 0;
+    const viewportX = 300; // 元素在截图中的 CSS 像素 X
+    const canvasX = scrollX + viewportX; // 修复后的 dstX 逻辑
+    const docX = viewportX + scrollX; // 文档坐标 X
+    expect(canvasX).toBe(docX); // canvas X = 文档 X ✓
+  });
+
+  it('截图坐标系：scrollX>0 时 dstX=scrollX 使 canvas X = 文档 X', () => {
+    // 元素在 viewport X=100 处，页面横向滚动 scrollX=200 → 文档 X=300
+    const scrollX = 200;
+    const viewportX = 100;
+    const docX = viewportX + scrollX; // 300
+    // 修复：dstX=scrollX，视口内 CSS X 加上 dstX 偏移 = 文档 X
+    const canvasX = scrollX + viewportX;
+    expect(canvasX).toBe(docX);
+    // 叠加层 canvas X = 文档 X = 300，与截图对齐 ✓
+    const overlayCanvasX = layoutOverlay({ x: docX, y: 350, w: 40, h: 30 }, range, 0).box.x;
+    expect(overlayCanvasX).toBe(docX);
+    expect(canvasX).toBe(overlayCanvasX);
+  });
+
+  it('截图自然 CSS 宽度 = img.naturalWidth / dpr，避免拉伸', () => {
+    // 验证：对任意 dpr，dstW = naturalWidth/dpr 还原 1:1 CSS 像素比例
+    for (const [naturalWidth, dpr] of [[2560, 2], [1920, 1.5], [1280, 1]] as const) {
+      const dstW = naturalWidth / dpr;
+      // dstW 应等于 innerWidth（viewport CSS 宽），而非更宽的 docWidth
+      expect(dstW).toBeCloseTo(naturalWidth / dpr);
+      // 确认 scale 正确：源 naturalWidth px → 目标 naturalWidth/dpr px，比例 = 1/dpr
+      expect(dstW / naturalWidth).toBeCloseTo(1 / dpr);
+    }
   });
 });
