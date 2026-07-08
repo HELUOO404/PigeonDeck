@@ -32,6 +32,7 @@ function stubChromeResponse(response: unknown): ReturnType<typeof vi.fn> {
 
 describe('requestCapture', () => {
   afterEach(() => {
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -52,6 +53,19 @@ describe('requestCapture', () => {
     stubChromeResponse({});
 
     await expect(requestCapture()).rejects.toThrow('captureVisibleTab returned no dataUrl');
+  });
+
+  it('rejects when the background capture message hangs', async () => {
+    vi.useFakeTimers();
+    const sendMessage = vi.fn().mockReturnValue(new Promise(() => {}));
+    vi.stubGlobal('chrome', { runtime: { sendMessage } } satisfies ChromeRuntimeMock);
+
+    const capture = requestCapture(25);
+    const assertion = expect(capture).rejects.toThrow('captureVisibleTab timed out');
+    await vi.advanceTimersByTimeAsync(25);
+
+    await assertion;
+    vi.useRealTimers();
   });
 });
 

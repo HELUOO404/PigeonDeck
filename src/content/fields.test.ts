@@ -17,6 +17,7 @@ import {
   modbarTitleKey,
   ControlContext,
 } from './fields';
+import { fieldLabelKey } from './field-labels';
 
 let target: HTMLElement;
 let ctx: ControlContext;
@@ -56,6 +57,12 @@ describe('FIELD_DEFS — 注册表', () => {
     for (const key of Object.keys(FIELD_DEFS)) {
       if (key === 'replaceImg') continue; // 图片替换是动作按钮，不属样式分类
       expect(FIELD_CATEGORY[key], key).toBeTruthy();
+    }
+  });
+
+  it('导出摘要用的轻量字段标签表与 FIELD_DEFS 保持一致', () => {
+    for (const [key, def] of Object.entries(FIELD_DEFS)) {
+      expect(fieldLabelKey(key), key).toBe(def.labelKey);
     }
   });
 

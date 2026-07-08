@@ -59,8 +59,43 @@ chrome.runtime.onMessage.addListener(
 
 /** 上次截图时间戳（ms），用于限速 */
 let lastCaptureTime = 0;
+let captureQueue: Promise<void> = Promise.resolve();
 /** captureVisibleTab 最小间隔（Chrome 每秒最多 2 次） */
 const CAPTURE_MIN_INTERVAL_MS = 600;
+/** background 队列内单次截图超时；短于 content 侧超时，便于返回明确错误并放行队列 */
+const CAPTURE_TIMEOUT_MS = 9000;
+
+function captureVisibleTabWithTimeout(windowId: number): Promise<string> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('captureVisibleTab timed out'));
+    }, CAPTURE_TIMEOUT_MS);
+  });
+  return Promise.race([
+    chrome.tabs.captureVisibleTab(windowId, { format: 'png' }),
+    timeout,
+  ]).finally(() => {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  });
+}
+
+function queuedCaptureVisibleTab(windowId: number): Promise<string> {
+  const task = captureQueue.then(async () => {
+    const now = Date.now();
+    const wait = CAPTURE_MIN_INTERVAL_MS - (now - lastCaptureTime);
+    if (wait > 0) {
+      await new Promise<void>((resolve) => setTimeout(resolve, wait));
+    }
+    lastCaptureTime = Date.now();
+    return captureVisibleTabWithTimeout(windowId);
+  });
+  captureQueue = task.then(
+    () => undefined,
+    () => undefined
+  );
+  return task;
+}
 
 /**
  * 处理内容侧截图请求 { type: 'pd-capture' }。
@@ -87,16 +122,8 @@ chrome.runtime.onMessage.addListener(
     }
 
     (async () => {
-      // 限速：补足到 CAPTURE_MIN_INTERVAL_MS
-      const now = Date.now();
-      const wait = CAPTURE_MIN_INTERVAL_MS - (now - lastCaptureTime);
-      if (wait > 0) {
-        await new Promise<void>((resolve) => setTimeout(resolve, wait));
-      }
-      lastCaptureTime = Date.now();
-
       try {
-        const dataUrl = await chrome.tabs.captureVisibleTab(windowId, { format: 'png' });
+        const dataUrl = await queuedCaptureVisibleTab(windowId);
         sendResponse({ dataUrl });
       } catch (err) {
         logger.error('captureVisibleTab failed', err);

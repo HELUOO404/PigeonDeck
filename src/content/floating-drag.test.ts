@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { mountPopover } from './popover';
 import { makeDraggableByHandle } from './floating-drag';
 
 describe('makeDraggableByHandle', () => {
@@ -24,19 +23,18 @@ describe('makeDraggableByHandle', () => {
     expect(onDrag).not.toHaveBeenCalled();
   });
 
-  it('closes derived popovers when dragging starts', () => {
-    const root = document.createElement('div');
+  it('runs the drag-start callback once when dragging starts', () => {
     const panel = document.createElement('div');
     const handle = document.createElement('div');
-    const popover = document.createElement('div');
-    document.body.append(root, panel);
+    const onDragStart = vi.fn();
     panel.appendChild(handle);
-    mountPopover(root, popover, handle);
-    makeDraggableByHandle(panel, handle);
+    document.body.appendChild(panel);
+    makeDraggableByHandle(panel, handle, undefined, onDragStart);
 
     handle.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, pointerId: 1, clientX: 10, clientY: 10 }));
     handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 20, clientY: 20 }));
+    handle.dispatchEvent(new PointerEvent('pointermove', { bubbles: true, pointerId: 1, clientX: 30, clientY: 30 }));
 
-    expect(root.contains(popover)).toBe(false);
+    expect(onDragStart).toHaveBeenCalledTimes(1);
   });
 });

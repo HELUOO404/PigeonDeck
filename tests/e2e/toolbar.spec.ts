@@ -407,3 +407,20 @@ test('⑩ dragging the expanded toolbar does not close an annotation panel', asy
 
   await page.close();
 });
+
+test('⑪ clicking an instant toolbar action closes an unsaved annotation panel', async () => {
+  const page = await openFixturePage();
+
+  await clickShadowEl(page, 'pd-ball');
+  await waitShadowVisible(page, '[data-testid="pd-toolbar"]');
+  await clickPageEl(page, '#btn-primary');
+  await waitShadowVisible(page, '[data-testid="pd-panel"]');
+
+  await clickShadowEl(page, 'pd-btn-copy-text');
+
+  await expect
+    .poll(() => shadowExists(page, '[data-testid="pd-panel"]'), { timeout: 5000 })
+    .toBe(false);
+
+  await page.close();
+});

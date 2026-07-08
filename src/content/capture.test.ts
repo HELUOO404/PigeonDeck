@@ -69,8 +69,8 @@ function setupCopyImagePanel(): {
     feedbackLayer,
   }) as unknown as CopyImageInternals;
   const canvas = fakeCanvas();
-  manager.currentCanvas = canvas;
   manager.openPanel(canvas);
+  manager.currentCanvas = canvas;
   return { manager, panelLayer, feedbackLayer };
 }
 
@@ -261,6 +261,15 @@ describe('CopyImageManager — 图片灯箱 Esc 分层', () => {
     expect(panelLayer.querySelector('[data-testid="pd-image-output"]')).toBeNull();
 
     manager.close();
+  });
+
+  it('关闭图片导出面板时释放当前 canvas 引用', () => {
+    const { manager, panelLayer } = setupCopyImagePanel();
+
+    manager.close();
+
+    expect(panelLayer.querySelector('[data-testid="pd-image-output"]')).toBeNull();
+    expect(manager.currentCanvas).toBeNull();
   });
 });
 

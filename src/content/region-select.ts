@@ -10,6 +10,7 @@ import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import type { PanelManager } from './panel';
 import { makeDraggableByHandle } from './floating-drag';
+import { closeAllPopovers } from './popover';
 import { buildSelector, isVisible, findScrollableAncestor } from '../shared/dom-utils';
 import { pushEsc } from './esc-stack';
 import { t } from './i18n';
@@ -399,7 +400,7 @@ export class RegionSelectManager {
     this.regionPanelEl = panel;
 
     // 顶部把手可拖动面板
-    makeDraggableByHandle(panel, drag);
+    makeDraggableByHandle(panel, drag, undefined, closeAllPopovers);
 
     // 定位面板：锚定区域右下角附近，夹紧视口
     this.positionRegionPanel(viewportPos);

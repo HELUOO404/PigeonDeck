@@ -1,6 +1,17 @@
 import { Annotation, RICHTEXT_DOM_CSSPROP } from '../state/annotations';
-import { FIELD_DEFS } from './fields';
+import type { StyleChange } from '../state/annotations';
+import { fieldLabelKey } from './field-labels';
 import { t } from './i18n';
+
+export interface ChangeSummaryRow {
+  label: string;
+  oldText: string;
+  newText: string;
+}
+
+export type AnnotationSummaryRow =
+  | { kind: 'change'; row: ChangeSummaryRow }
+  | { kind: 'richText'; text: string };
 
 export function truncateValue(value: string, max = 24): string {
   return value.length > max ? value.slice(0, max) + '…' : value;
@@ -13,7 +24,7 @@ export function htmlToText(html: string): string {
 }
 
 export function srcSummary(src: string): string {
-  if (!src) return '…';
+  if (!src) return '—';
   if (src.startsWith('data:')) {
     const mime = src.slice(5, src.indexOf(';') >= 0 ? src.indexOf(';') : src.indexOf(','));
     return `data:${mime || 'media'}`;
@@ -27,27 +38,42 @@ export function srcSummary(src: string): string {
   }
 }
 
-export function composeCardChangeLines(annotation: Annotation): string[] {
-  const lines: string[] = [];
+export function summarizeStyleChange(change: StyleChange): ChangeSummaryRow | null {
+  if (change.cssProp === RICHTEXT_DOM_CSSPROP) return null;
+  const isHtml = change.cssProp === 'html';
+  const isText = change.cssProp === 'text';
+  const isSrc = change.cssProp === 'src';
+  const labelKey = fieldLabelKey(change.prop);
+  const label =
+    isHtml || isText
+      ? t('rt_content_change')
+      : isSrc
+        ? t('replace_media_change')
+        : labelKey
+          ? t(labelKey)
+          : change.prop;
+  const format = (v: string): string => (isHtml ? htmlToText(v) : isSrc ? srcSummary(v) : v);
+  return {
+    label,
+    oldText: truncateValue(format(change.oldValue)),
+    newText: truncateValue(format(change.newValue)),
+  };
+}
+
+export function summarizeAnnotationRows(annotation: Annotation): AnnotationSummaryRow[] {
+  const rows: AnnotationSummaryRow[] = [];
   for (const change of annotation.changes) {
-    if (change.cssProp === RICHTEXT_DOM_CSSPROP) continue;
-    const def = FIELD_DEFS[change.prop];
-    const isHtml = change.cssProp === 'html';
-    const isText = change.cssProp === 'text';
-    const isSrc = change.cssProp === 'src';
-    const label =
-      isHtml || isText
-        ? t('rt_content_change')
-        : isSrc
-          ? t('replace_media_change')
-          : def
-            ? t(def.labelKey)
-            : change.prop;
-    const fmt = (v: string): string => (isHtml ? htmlToText(v) : isSrc ? srcSummary(v) : v);
-    lines.push(`${label}: ${truncateValue(fmt(change.oldValue))} → ${truncateValue(fmt(change.newValue))}`);
+    const row = summarizeStyleChange(change);
+    if (row) rows.push({ kind: 'change', row });
   }
   for (const rc of annotation.richText ?? []) {
-    lines.push(rc.summary);
+    rows.push({ kind: 'richText', text: rc.summary });
   }
-  return lines;
+  return rows;
+}
+
+export function composeCardChangeLines(annotation: Annotation): string[] {
+  return summarizeAnnotationRows(annotation).map((row) =>
+    row.kind === 'change' ? `${row.row.label}: ${row.row.oldText} → ${row.row.newText}` : row.text
+  );
 }

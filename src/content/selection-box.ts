@@ -11,6 +11,7 @@
 import { AnnotationStore, StyleChange, mergeChanges } from '../state/annotations';
 import { History } from '../state/history';
 import { buildSelector } from '../shared/dom-utils';
+import { applyChangesTo } from './change-apply';
 
 /** 八向句柄方位 */
 type HandleDir = 'tl' | 'tr' | 'bl' | 'br' | 'tm' | 'bm' | 'ml' | 'mr';
@@ -35,15 +36,6 @@ function resolveTarget(selector: string): HTMLElement | null {
     return null;
   } catch {
     return null;
-  }
-}
-
-/** 应用样式变更到 HTMLElement（撤销/重做用） */
-function applyChangesToEl(el: HTMLElement | null, changes: StyleChange[], dir: 'old' | 'new'): void {
-  if (!el) return;
-  for (const c of changes) {
-    const value = dir === 'old' ? c.oldValue : c.newValue;
-    el.style.setProperty(c.cssProp, value);
   }
 }
 
@@ -277,11 +269,11 @@ export class SelectionBox {
         this.history.push({
           label: 'move:resize',
           apply: () => {
-            applyChangesToEl(this.resolveEl(afterSnap.selector), changes, 'new');
+            applyChangesTo(this.resolveEl(afterSnap.selector), changes, 'new');
             this.store.update(afterSnap.id, { changes: afterSnap.changes });
           },
           revert: () => {
-            applyChangesToEl(this.resolveEl(afterSnap.selector), changes, 'old');
+            applyChangesTo(this.resolveEl(afterSnap.selector), changes, 'old');
             this.store.update(before.id, { changes: before.changes });
           },
         });
@@ -305,11 +297,11 @@ export class SelectionBox {
       this.history.push({
         label: 'move:resize',
         apply: () => {
-          applyChangesToEl(this.resolveEl(addedSnap.selector), changes, 'new');
+          applyChangesTo(this.resolveEl(addedSnap.selector), changes, 'new');
           this.store.restore(addedSnap);
         },
         revert: () => {
-          applyChangesToEl(this.resolveEl(addedSnap.selector), changes, 'old');
+          applyChangesTo(this.resolveEl(addedSnap.selector), changes, 'old');
           this.store.remove(addedSnap.id);
         },
       });

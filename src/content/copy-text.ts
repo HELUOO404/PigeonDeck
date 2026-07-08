@@ -13,7 +13,7 @@ import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { getLocale, t } from './i18n';
 import { buildOperations, renderTaskList, PageContext } from './format';
-import { PopoverHandle } from './popover';
+import { closeAllPopovers, PopoverHandle } from './popover';
 import { openDropdown } from './dropdown';
 import { makeDraggableByHandle } from './floating-drag';
 
@@ -198,7 +198,7 @@ export class CopyTextManager {
 
     this.positionPanel();
     // 顶栏可拖动整面板（X 按钮/输入类子元素由 makeDraggableByHandle 忽略）
-    makeDraggableByHandle(panel, head);
+    makeDraggableByHandle(panel, head, undefined, closeAllPopovers);
     this.bindDismiss();
   }
 
@@ -234,6 +234,7 @@ export class CopyTextManager {
       this.closePanel();
     };
     this.keyHandler = (ev: KeyboardEvent): void => {
+      if (ev.defaultPrevented) return;
       if (ev.key === 'Escape') {
         ev.stopPropagation();
         this.closePanel();

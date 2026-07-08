@@ -11,6 +11,7 @@ import { Settings } from '../state/settings';
 import { Toast } from './toast';
 import { t } from './i18n';
 import { makeDraggableByHandle } from './floating-drag';
+import { closeAllPopovers } from './popover';
 import { composeCardChangeLines } from './annotation-summary';
 import { pushEsc } from './esc-stack';
 import { loadImage, requestCapture } from './capture-client';
@@ -619,8 +620,8 @@ export class CopyImageManager {
         }
       }
 
-      this.currentCanvas = canvas;
       this.openPanel(canvas);
+      this.currentCanvas = canvas;
     } catch (err) {
       console.error('[PigeonDeck] captureStitched failed', err);
       this.toast.show(t('toast_capture_failed'));
@@ -711,7 +712,7 @@ export class CopyImageManager {
 
     this.positionPanel();
     // 顶栏可拖动整面板（X 按钮由 makeDraggableByHandle 忽略）
-    makeDraggableByHandle(panel, head);
+    makeDraggableByHandle(panel, head, undefined, closeAllPopovers);
     this.bindDismiss();
   }
 
@@ -746,7 +747,9 @@ export class CopyImageManager {
       ev.stopPropagation();
       this.currentCanvas?.toBlob((blob) => {
         if (!blob) return;
-        window.open(URL.createObjectURL(blob), '_blank');
+        const url = URL.createObjectURL(blob);
+        window.open(url, '_blank');
+        window.setTimeout(() => URL.revokeObjectURL(url), 30000);
       }, 'image/png');
     });
     back.appendChild(openBtn);
@@ -790,6 +793,7 @@ export class CopyImageManager {
       this.closePanel();
     };
     this.keyHandler = (ev: KeyboardEvent): void => {
+      if (ev.defaultPrevented) return;
       if (ev.key === 'Escape') {
         ev.stopPropagation();
         this.closePanel();
@@ -813,6 +817,7 @@ export class CopyImageManager {
       this.panelEl.remove();
       this.panelEl = null;
     }
+    this.currentCanvas = null;
   }
 
   // ---- 剪贴板 / 下载 ----

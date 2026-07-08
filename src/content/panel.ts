@@ -16,7 +16,6 @@ import {
   AnnotationStore,
   Annotation,
   mergeChanges,
-  RICHTEXT_DOM_CSSPROP,
 } from '../state/annotations';
 import { History } from '../state/history';
 import { Settings } from '../state/settings';
@@ -31,7 +30,6 @@ import type { ElementType } from '../shared/dom-utils';
 import {
   FieldsSession,
   ControlContext,
-  FIELD_DEFS,
   modbarRows,
   autoModbarRows,
   modbarTitleKey,
@@ -44,7 +42,7 @@ import { SelectionResolver } from './selection';
 import { SelectionBox } from './selection-box';
 import { Toast } from './toast';
 import { applyChangesTo } from './change-apply';
-import { htmlToText, srcSummary, truncateValue } from './annotation-summary';
+import { summarizeAnnotationRows } from './annotation-summary';
 import { makeDraggableByHandle } from './floating-drag';
 
 /* ---- SVG 图标（Lucide 风格，与 preview parts 07/11/26/35 一致） ---- */
@@ -315,6 +313,14 @@ export class PanelManager {
     return ev.composedPath().includes(this.shadowHost);
   }
 
+  private isToolbarDragStart(path: EventTarget[]): boolean {
+    return path.some(
+      (n) =>
+        n instanceof HTMLElement &&
+        (n.getAttribute('data-testid') === 'pd-ball' || n.getAttribute('data-testid') === 'pd-btn-logo')
+    );
+  }
+
   private onMouseDown = (ev: MouseEvent): void => {
     if (this.suspended) return; // 取色器等系统浮层期间不干预页面事件（F18）
     const path = ev.composedPath();
@@ -328,6 +334,7 @@ export class PanelManager {
       (n) => n instanceof HTMLElement && n.classList.contains('pd-selbox')
     );
     const inOwnUi = this.isOwnUi(ev);
+    const isToolbarDragStart = this.isToolbarDragStart(path);
 
     // 菜单外点击 → 关菜单
     if (this.menuEl && !path.includes(this.menuEl)) {
@@ -335,7 +342,7 @@ export class PanelManager {
     }
 
     // 面板外点击 → 关面板（放弃未保存内容，回滚本次会话预览）
-    if (this.panelEl && !path.includes(this.panelEl) && !inPopover && !inSelbox && !inOwnUi) {
+    if (this.panelEl && !path.includes(this.panelEl) && !inPopover && !inSelbox && !isToolbarDragStart) {
       this.closePanel();
     }
 
@@ -716,15 +723,20 @@ export class PanelManager {
     handle.setAttribute('data-testid', 'pd-panel-drag');
 
     // 复用通用拖拽助手；onDrag 记录相对锚点自动放置基准的偏移，供 scroll/resize 重定位保持
-    makeDraggableByHandle(panel, handle, (left, top) => {
-      if (!this.panelTarget) return;
-      const base = placeNear(
-        this.panelTarget.getBoundingClientRect(),
-        panel.offsetWidth,
-        panel.offsetHeight
-      );
-      this.panelDragOffset = { dx: left - base.left, dy: top - base.top };
-    });
+    makeDraggableByHandle(
+      panel,
+      handle,
+      (left, top) => {
+        if (!this.panelTarget) return;
+        const base = placeNear(
+          this.panelTarget.getBoundingClientRect(),
+          panel.offsetWidth,
+          panel.offsetHeight
+        );
+        this.panelDragOffset = { dx: left - base.left, dy: top - base.top };
+      },
+      closeAllPopovers
+    );
     return handle;
   }
 
@@ -1017,9 +1029,8 @@ export class PanelManager {
 
     // 下半：调整项区（有修改时显示，pd-diff 精简格式：原值 → 新值）
     // F21：富文本 DOM 还原载体（cssProp==='richtext'）不展示；富文本格式修改由 richText[] 呈现。
-    const displayChanges = annotation.changes.filter((c) => c.cssProp !== RICHTEXT_DOM_CSSPROP);
-    const richRows = annotation.richText ?? [];
-    if (displayChanges.length > 0 || richRows.length > 0) {
+    const summaryRows = summarizeAnnotationRows(annotation);
+    if (summaryRows.length > 0) {
       if (annotation.note) {
         const hr = document.createElement('div');
         hr.className = 'hr';
@@ -1028,47 +1039,31 @@ export class PanelManager {
       const mods = document.createElement('div');
       mods.className = 'mods';
       mods.setAttribute('data-testid', 'pd-card-mods');
-      for (const change of displayChanges) {
+      for (const summary of summaryRows) {
         const row = document.createElement('div');
         row.className = 'mod';
-        const k = document.createElement('span');
-        k.className = 'k';
-        const def = FIELD_DEFS[change.prop];
-        // 富文本纯文本内容修改（cssProp='html'/'text'）/ 媒体替换（cssProp='src'）：友好标签 + 精简值
-        const isHtml = change.cssProp === 'html';
-        const isText = change.cssProp === 'text';
-        const isSrc = change.cssProp === 'src';
-        if (isHtml || isText) {
-          k.textContent = t('rt_content_change');
-        } else if (isSrc) {
-          k.textContent = t('replace_media_change');
+        if (summary.kind === 'change') {
+          const k = document.createElement('span');
+          k.className = 'k';
+          k.textContent = summary.row.label;
+          row.appendChild(k);
+          const diff = document.createElement('span');
+          diff.className = 'pd-diff';
+          diff.appendChild(document.createTextNode(summary.row.oldText));
+          const arrow = document.createElement('i');
+          arrow.textContent = '→';
+          diff.appendChild(arrow);
+          const to = document.createElement('b');
+          to.textContent = summary.row.newText;
+          diff.appendChild(to);
+          row.appendChild(diff);
         } else {
-          k.textContent = def ? t(def.labelKey) : change.prop;
+          row.setAttribute('data-testid', 'pd-card-richtext');
+          const line = document.createElement('span');
+          line.className = 'pd-diff';
+          line.textContent = summary.text;
+          row.appendChild(line);
         }
-        row.appendChild(k);
-        const diff = document.createElement('span');
-        diff.className = 'pd-diff';
-        const format = (v: string): string =>
-          isHtml ? htmlToText(v) : isSrc ? srcSummary(v) : v;
-        diff.appendChild(document.createTextNode(truncateValue(format(change.oldValue))));
-        const arrow = document.createElement('i');
-        arrow.textContent = '→';
-        diff.appendChild(arrow);
-        const to = document.createElement('b');
-        to.textContent = truncateValue(format(change.newValue));
-        diff.appendChild(to);
-        row.appendChild(diff);
-        mods.appendChild(row);
-      }
-      // 结构化富文本修改：每条一行预生成 summary（与导出/图卡共用同一措辞）
-      for (const rc of richRows) {
-        const row = document.createElement('div');
-        row.className = 'mod';
-        row.setAttribute('data-testid', 'pd-card-richtext');
-        const line = document.createElement('span');
-        line.className = 'pd-diff';
-        line.textContent = rc.summary;
-        row.appendChild(line);
         mods.appendChild(row);
       }
       card.appendChild(mods);

@@ -1,9 +1,8 @@
-import { closeAllPopovers } from './popover';
-
 export function makeDraggableByHandle(
   panelEl: HTMLElement,
   handleEl: HTMLElement,
-  onDrag?: (left: number, top: number) => void
+  onDrag?: (left: number, top: number) => void,
+  onDragStart?: () => void
 ): () => void {
   let start: { mx: number; my: number; left: number; top: number } | null = null;
   let dragged = false;
@@ -18,7 +17,7 @@ export function makeDraggableByHandle(
     if (!start) return;
     if (!dragged) {
       dragged = true;
-      closeAllPopovers();
+      onDragStart?.();
     }
     const left = start.left + (ev.clientX - start.mx);
     const top = start.top + (ev.clientY - start.my);

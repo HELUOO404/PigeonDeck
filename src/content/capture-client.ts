@@ -8,11 +8,22 @@ export function loadImage(dataUrl: string): Promise<HTMLImageElement> {
   });
 }
 
+export const CAPTURE_REQUEST_TIMEOUT_MS = 10000;
+
 /** Request a visible-tab screenshot from the background service worker. */
-export async function requestCapture(): Promise<string> {
-  const resp = (await chrome.runtime.sendMessage({ type: 'pd-capture' })) as
-    | { dataUrl?: string; error?: string }
-    | undefined;
+export async function requestCapture(timeoutMs = CAPTURE_REQUEST_TIMEOUT_MS): Promise<string> {
+  let timeoutId: ReturnType<typeof setTimeout> | null = null;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error('captureVisibleTab timed out'));
+    }, timeoutMs);
+  });
+  const resp = (await Promise.race([
+    chrome.runtime.sendMessage({ type: 'pd-capture' }),
+    timeout,
+  ]).finally(() => {
+    if (timeoutId !== null) clearTimeout(timeoutId);
+  })) as { dataUrl?: string; error?: string } | undefined;
   if (!resp?.dataUrl) {
     throw new Error(resp?.error ?? 'captureVisibleTab returned no dataUrl');
   }
