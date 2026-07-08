@@ -172,37 +172,36 @@ test('②  拖 br 句柄 → 目标元素 width + height 变大', async () => {
   const page = await openFixturePage();
 
   await expandToolbar(page);
-  await setGranularitySmart(page); // 逻辑12：smart 基准让点击 card-buttons 解析到组件块
   await enterMoveMode(page);
 
-  // 单击 card-buttons 选中
-  const cardInfo = await page.evaluate(() => {
-    const el = document.getElementById('card-buttons')!;
+  // D1：移动模式默认 element 粒度 = 选原始命中元素（对齐批注模式，offset=0 不走组件块解析）。
+  // 单击具体叶子元素（按钮）即选中它本身，拖 br 句柄放大它。
+  const btnInfo = await page.evaluate(() => {
+    const el = document.getElementById('btn-primary')!;
     const r = el.getBoundingClientRect();
     const cs = window.getComputedStyle(el);
     return {
       cx: r.left + r.width / 2,
       cy: r.top + r.height / 2,
       w: parseFloat(cs.width),
-      h: parseFloat(cs.height),
     };
   });
 
-  await page.mouse.click(cardInfo.cx, cardInfo.cy);
+  await page.mouse.click(btnInfo.cx, btnInfo.cy);
   await waitShadowTestId(page, 'pd-selbox');
 
   // 拖 br 句柄放大（稳定读句柄坐标 + 分段拖拽，负载下可靠触发缩放）
   await dragHandle(page, 'br', 80, 80);
 
-  // 等待目标元素 computed width/height 变大（通过 computed style 验证）
+  // 等待目标元素 computed width 变大（通过 computed style 验证）
   await expect.poll(async () => {
     const newW = await page.evaluate(() => {
-      const el = document.getElementById('card-buttons');
+      const el = document.getElementById('btn-primary');
       if (!el) return 0;
       return parseFloat(window.getComputedStyle(el).width);
     });
-    return newW > cardInfo.w + 20;
-  }, { timeout: 6000, message: `card-buttons width should grow beyond ${cardInfo.w + 20}` }).toBe(true);
+    return newW > btnInfo.w + 20;
+  }, { timeout: 6000, message: `btn-primary width should grow beyond ${btnInfo.w + 20}` }).toBe(true);
 
   await page.close();
 });
