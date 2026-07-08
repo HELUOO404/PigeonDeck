@@ -12,6 +12,8 @@
 
 > **2026-07-07：已完成「7.6.2 用户反馈第三轮」修复**（复冒烟反馈，9 个提交在本地 main：`844d8f7`…`61ea914`）。修：取色器仍卡死（先加固再入守卫/notify 快照仍未根治 → **F18c 彻底弃用原生 EyeDropper，改页内 captureVisibleTab 截图 + 覆盖层放大镜取色，覆盖层为自有 DOM 无系统捕获态**，须真机复验）、上轮动画未生效（`animateHeight` 改可靠 rAF FLIP）、上轮高级样式改错（回退并恢复调试内层滚动+各子分类等高）、打印留印子（`@media print` 隐藏宿主）、重选已标注元素隐藏持久框、一批交互约定固化。**关键：新增 [docs/conventions/interaction-invariants.md](docs/conventions/interaction-invariants.md) 固化「浮层再点即关 / 拖面板关派生浮层 / 拖工具盘只关其派生面 / 编辑面 Ctrl+Enter·Esc / 选中已标注隐藏持久框 / 原生 tooltip / 打印隐藏 / 动画 / 导出不自动化 / 仅会话内存」11 条交互不变量，INDEX + CLAUDE 指针，改 UI 前必读——不再逐条重复提醒。** 终态 vitest 385 / 全量 E2E 105 passed / i18n ✓。**⚠️ 取色器卡死修复须真机复验（原生取色器无法自动化）。9 提交叠加前两轮共领先 origin 约 45 提交，待 push。**
 
+> **2026-07-08：Codex 架构重构（分支 `arch-refactor-codex`，9 个重构提交 `76b153d`…`6bb7798`）。** 从巨型模块拆出可单测的纯函数/工具子模块并补行为保护测试（行为等价，门禁全绿）：`capture.ts` → `capture-range.ts`（截图范围）/`capture-client.ts`（截图请求客户端）/`capture-overlay-layout.ts`·`capture-card-layout.ts`（叠加与卡片布局）；`fields.ts` → `field-labels.ts`（轻量标签表）/`field-values.ts`（样式字段值工具）/`field-layout.ts`（字段布局规则）；`panel.ts` → `floating-drag.ts`（`makeDraggableByHandle`）/`theme.ts`（主题切换）/`change-apply.ts`（`applyChangesTo`）/`annotation-summary.ts`（导出摘要）。**改这些领域时优先改拆出的子模块，别把逻辑塞回巨型文件。** 本文件是仓库唯一上下文真相源；`AGENTS.md` 仅为指向本文件的指针。
+
 各阶段要点：
 - **阶段 1 工程骨架**：Vite 双配置构建（content IIFE + background ES）、Shadow DOM 四层宿主、pigeonlib 设计令牌、i18n 框架、logger。
 - **阶段 2 工具盘与悬浮球**：模式控制器状态机、42px 悬浮球、7 按钮工具盘、tooltip、长按拖拽持久化、E2E 测试基建。
