@@ -142,6 +142,9 @@ function animateHeight(el: HTMLElement, mutate: () => void, after?: () => void):
   }
   const gen = (heightAnimGen.get(el) ?? 0) + 1;
   heightAnimGen.set(el, gen);
+  // 动画期间隐藏主体滚动条：内容切换（智能↔高级样式）过渡中 pbody 被挤出滚动条、到终高又
+  // 消失会引起宽度回流卡顿；面板本身 overflow:hidden 已裁剪溢出，无需 pbody 再出条。
+  el.classList.add('pd-h-anim');
   el.style.height = `${h0}px`;
   void el.offsetHeight; // 提交起点高度
   requestAnimationFrame(() => {
@@ -152,6 +155,7 @@ function animateHeight(el: HTMLElement, mutate: () => void, after?: () => void):
       if (done || heightAnimGen.get(el) !== gen) return;
       done = true;
       el.removeEventListener('transitionend', onEnd);
+      el.classList.remove('pd-h-anim');
       el.style.height = ''; // 清回自然高度（auto）
       after?.();
     };

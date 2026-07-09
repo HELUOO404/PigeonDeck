@@ -382,6 +382,9 @@
   max-height: calc(100vh - 120px);
   overflow-y: auto;
 }
+/* 高度动画期间隐藏主体滚动条：内容切换（智能↔高级样式）过渡中 pbody 被挤出滚动条、
+   到终高又消失会引起宽度回流卡顿；.panel overflow:hidden 已裁剪溢出，动画期无需再出条。 */
+.panel.pd-h-anim .pbody { overflow: hidden; }
 
 /* 底栏（信息 + 删除/保存） */
 .pfoot {
