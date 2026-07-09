@@ -40,13 +40,7 @@
 
 ## 为什么用 PigeonDeck
 
-设计验收和 AI 编码分处两个世界。问题你在浏览器里一眼**看**得到，但编码代理需要的是**文字**——精确的选择器、前后值，以及"往左挪 12px"之外的真实布局意图。
-
-PigeonDeck 补上这道断层：你在页面上指，它替你写清楚。
-
-- **可视化进，可执行出。** 在真实页面点选，产出结构化、去重后的任务清单，而不是一段含糊的话。
-- **天生懂布局。** 输出会明确要求代理**不要**硬编码 `top`/`left`，优先用 `flex` / `grid` / `gap` / `margin` / `order`；视觉坐标只当线索，绝不当 CSS。
-- **同一元素，一条指令。** 同一元素上的批注 + 样式修改 + 移动会合并成一条操作，代理不会收到互相矛盾的编辑。
+你对页面的每一处审美判断，都应当被结构化地精确表达——而不是退化成一句模糊的描述。PigeonDeck 把你在页面上做的批注、修改和移动，转化为选择器、前后值与布局关系。Agent 照此执行，不再偏离你的想法。
 
 ---
 
@@ -76,7 +70,7 @@ PigeonDeck 补上这道断层：你在页面上指，它替你写清楚。
   </tr>
   <tr>
     <td width="50%"><img src="assets/screenshots/live/zh/05-advanced-styles.webp" alt="高级样式"><br><sub><b>改样式。</b>排版、尺寸、外观，外加调试信息面板。</sub></td>
-    <td width="50%"><img src="assets/screenshots/live/zh/06-move-selbox.webp" alt="移动模式"><br><sub><b>移动与吸附。</b>选中组件，带八向缩放句柄。</sub></td>
+    <td width="50%"><img src="assets/screenshots/live/zh/06-move-selbox.webp" alt="移动模式"><br><sub><b>移动与吸附。</b>选中组件，拖到新位置——带实时对齐参考线。</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="assets/screenshots/live/zh/03-pins-card.webp" alt="位号与卡片"><br><sub><b>位号与卡片。</b>金色位号；点开卡片逐条查看批注。</sub></td>

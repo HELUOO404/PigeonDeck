@@ -40,13 +40,7 @@ No accounts, no servers, no telemetry. Everything lives in the current tab sessi
 
 ## Why PigeonDeck
 
-Design review and AI coding live in two different places. You *see* what's wrong in the browser, but your coding agent needs it as *words* — precise selectors, before/after values, and layout intent that isn't just "move it 12px left."
-
-PigeonDeck closes that gap. You point at the page; it writes the brief.
-
-- **Visual in, executable out.** Point-and-click on the real page produces a structured, deduplicated task list — not a vague paragraph.
-- **Layout-aware by design.** The output explicitly tells the agent *not* to hardcode `top`/`left`, and to prefer `flex` / `grid` / `gap` / `margin` / `order`. Visual coordinates are treated as hints, never as CSS.
-- **One element, one instruction.** Annotation + style change + move on the same element are merged into a single operation, so the agent never gets contradictory edits.
+Every visual judgment you make about a page deserves to be expressed as structured information — not a vague sentence. PigeonDeck turns your annotations, edits, and moves into selectors, before-and-after values, and layout relationships. Your intent reaches the agent intact.
 
 ---
 
@@ -76,7 +70,7 @@ PigeonDeck closes that gap. You point at the page; it writes the brief.
   </tr>
   <tr>
     <td width="50%"><img src="assets/screenshots/live/en/05-advanced-styles.webp" alt="Advanced styles"><br><sub><b>Edit styles.</b> Typography, size, appearance, and a debug readout.</sub></td>
-    <td width="50%"><img src="assets/screenshots/live/en/06-move-selbox.webp" alt="Move mode"><br><sub><b>Move &amp; snap.</b> Grab a component with eight resize handles.</sub></td>
+    <td width="50%"><img src="assets/screenshots/live/en/06-move-selbox.webp" alt="Move mode"><br><sub><b>Move &amp; snap.</b> Drag a component to a new position with alignment guides.</sub></td>
   </tr>
   <tr>
     <td width="50%"><img src="assets/screenshots/live/en/03-pins-card.webp" alt="Pins and card"><br><sub><b>Pins &amp; cards.</b> Numbered pins; open a card to review each note.</sub></td>
