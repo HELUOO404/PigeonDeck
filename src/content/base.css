@@ -128,6 +128,18 @@
   }
 }
 
+/* 收起动画期：工具盘脱离文档流（absolute），淡出/缩小时不再把悬浮球顶离静止位（防 Logo 闪现）。
+   右对齐球锚点；默认顶对齐球（向下展开），open-upward 底对齐球（向上展开）。过渡结束由 JS 去类。 */
+.pd-wrapper.pd-collapsing .pd-toolbar {
+  position: absolute;
+  right: 0;
+  top: 0;
+}
+.pd-wrapper.pd-collapsing .pd-toolbar.open-upward {
+  top: auto;
+  bottom: 0;
+}
+
 /* 激活态（move/settings 模式）：外描边 */
 .pd-toolbar.is-active {
   border-color: var(--c1-edge);

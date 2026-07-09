@@ -95,9 +95,11 @@ export class Toolbar {
   private dragStartPointer = { x: 0, y: 0 };
   private dragStartPos: Pos = { right: 0, bottom: 0 };
   private dragMoved = false;
-  // 收起动画期间延后翻锚（避免 fading 的工具盘仍在流内把球顶到上方再弹回＝Logo 闪现）
+  // 收起动画期间延后复位（避免 fading 的工具盘仍在流内把球顶到上方再弹回＝Logo 闪现）
   private collapseTimer: number | null = null;
   private onCollapseEnd: ((ev: TransitionEvent) => void) | null = null;
+  // 仅真·展开→收起才播收起动画（初始/非过渡收起态直接规范化，不设类/定时器，免扰早期拖拽）
+  private wasExpanded = false;
 
   constructor(controller: Controller, controlLayer: HTMLElement, history: History, onDragStart?: () => void) {
     this.controller = controller;
@@ -179,18 +181,29 @@ export class Toolbar {
   private syncState(): void {
     const { expanded, mode } = this.controller.getState();
 
-    // 任何状态切换先取消在途的收起翻锚（避免收起过渡期又展开时错误翻锚）
+    // 任何状态切换先取消在途的收起复位（避免收起过渡期又展开时错误复位）
     this.cancelCollapseReset();
+
+    const collapsing = !expanded && this.wasExpanded; // 仅真·展开→收起才播收起动画
+    this.wasExpanded = expanded;
 
     // 切换球 vs 工具盘：display 由 CSS（.pd-wrapper.pd-open）驱动，
     // 配合 @starting-style / display allow-discrete 做进出淡入淡出+缩放动画
     this.wrapper.classList.toggle('pd-open', expanded);
 
     if (!expanded) {
-      // 收起：不立即翻底锚——fading 的工具盘此刻仍在流内，若马上翻底锚会把球（首个子元素）
-      // 顶到工具盘上方再于工具盘 display:none 后弹回（Logo 闪现）。保持当前展开锚点，
-      // 等收起过渡结束再恢复规范底锚（收起球位置与展开锚点重合，无视觉跳变）。
-      this.scheduleCollapseReset();
+      if (collapsing) {
+        // 真收起：把工具盘转为 absolute 脱离文档流（.pd-collapsing）——否则它淡出/缩小期间仍占流内
+        // 高度，会把悬浮球（首个子元素）顶离静止位、待其 display:none 后弹回＝Logo 闪现（向上展开
+        // 尤甚，球默认在右下角故多向上展开）。脱流后球独占流、按底锚落回静止位，工具盘在原位淡出，
+        // 二者只在 Logo 处交叠淡变；过渡结束移除 collapsing + 规范化。
+        this.wrapper.classList.add('pd-collapsing');
+        this.applyPos();
+        this.scheduleCollapseReset();
+      } else {
+        // 初始 / 非过渡收起态：直接规范化底锚，无动画无定时器（免扰早期拖拽）
+        this.applyPos();
+      }
       return;
     }
 
@@ -232,7 +245,7 @@ export class Toolbar {
     }
   }
 
-  /** 取消在途的收起翻锚（清定时器 + 解绑 transitionend） */
+  /** 取消在途的收起复位（清定时器 + 解绑 transitionend + 去 collapsing 态） */
   private cancelCollapseReset(): void {
     if (this.collapseTimer !== null) {
       clearTimeout(this.collapseTimer);
@@ -242,16 +255,18 @@ export class Toolbar {
       this.toolbar.removeEventListener('transitionend', this.onCollapseEnd);
       this.onCollapseEnd = null;
     }
+    this.wrapper.classList.remove('pd-collapsing');
   }
 
   /**
-   * 收起过渡结束后恢复规范底锚：等工具盘 opacity 过渡结束（或兜底超时）再翻锚 +
-   * 去 open-upward，避免收起动画期间翻锚导致 Logo 闪现。期间若又展开则跳过。
+   * 收起过渡结束后复位：等工具盘 opacity 过渡结束（或兜底超时）再移除 collapsing（工具盘回流内、
+   * 但此时已 display:none 无影响）+ 去 open-upward + 规范化底锚。期间若又展开则跳过（由
+   * cancelCollapseReset 清理）。
    */
   private scheduleCollapseReset(): void {
     const reset = (): void => {
       this.cancelCollapseReset();
-      if (this.controller.getState().expanded) return; // 过渡期间又展开：不翻锚
+      if (this.controller.getState().expanded) return; // 过渡期间又展开：不复位
       this.toolbar.classList.remove('open-upward');
       this.applyPos();
     };
@@ -259,7 +274,7 @@ export class Toolbar {
       if (ev.target === this.toolbar && ev.propertyName === 'opacity') reset();
     };
     this.toolbar.addEventListener('transitionend', this.onCollapseEnd);
-    // 兜底：transitionend 未触发（缩减动效/打断/无过渡）时仍恢复底锚
+    // 兜底：transitionend 未触发（缩减动效/打断/无过渡）时仍复位
     this.collapseTimer = window.setTimeout(reset, 320);
   }
 
