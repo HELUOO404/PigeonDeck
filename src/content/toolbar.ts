@@ -95,6 +95,9 @@ export class Toolbar {
   private dragStartPointer = { x: 0, y: 0 };
   private dragStartPos: Pos = { right: 0, bottom: 0 };
   private dragMoved = false;
+  // 收起动画期间延后翻锚（避免 fading 的工具盘仍在流内把球顶到上方再弹回＝Logo 闪现）
+  private collapseTimer: number | null = null;
+  private onCollapseEnd: ((ev: TransitionEvent) => void) | null = null;
 
   constructor(controller: Controller, controlLayer: HTMLElement, history: History, onDragStart?: () => void) {
     this.controller = controller;
@@ -129,6 +132,7 @@ export class Toolbar {
     this.unsubscribe();
     this.unsubscribeHistory();
     window.removeEventListener('resize', this.onResize);
+    this.cancelCollapseReset();
     this.wrapper.remove();
   }
 
@@ -175,13 +179,18 @@ export class Toolbar {
   private syncState(): void {
     const { expanded, mode } = this.controller.getState();
 
+    // 任何状态切换先取消在途的收起翻锚（避免收起过渡期又展开时错误翻锚）
+    this.cancelCollapseReset();
+
     // 切换球 vs 工具盘：display 由 CSS（.pd-wrapper.pd-open）驱动，
-    // 配合 @starting-style 做淡入/缩放进入动画（收起态瞬时隐藏，保证 E2E 可见性断言稳定）
+    // 配合 @starting-style / display allow-discrete 做进出淡入淡出+缩放动画
     this.wrapper.classList.toggle('pd-open', expanded);
 
     if (!expanded) {
-      // 收起：恢复底锚（可能上次向下展开切到了顶锚）
-      this.applyPos();
+      // 收起：不立即翻底锚——fading 的工具盘此刻仍在流内，若马上翻底锚会把球（首个子元素）
+      // 顶到工具盘上方再于工具盘 display:none 后弹回（Logo 闪现）。保持当前展开锚点，
+      // 等收起过渡结束再恢复规范底锚（收起球位置与展开锚点重合，无视觉跳变）。
+      this.scheduleCollapseReset();
       return;
     }
 
@@ -221,6 +230,37 @@ export class Toolbar {
       el.style.bottom = 'auto';
       el.style.top = `${Math.max(0, ballTop)}px`;
     }
+  }
+
+  /** 取消在途的收起翻锚（清定时器 + 解绑 transitionend） */
+  private cancelCollapseReset(): void {
+    if (this.collapseTimer !== null) {
+      clearTimeout(this.collapseTimer);
+      this.collapseTimer = null;
+    }
+    if (this.onCollapseEnd) {
+      this.toolbar.removeEventListener('transitionend', this.onCollapseEnd);
+      this.onCollapseEnd = null;
+    }
+  }
+
+  /**
+   * 收起过渡结束后恢复规范底锚：等工具盘 opacity 过渡结束（或兜底超时）再翻锚 +
+   * 去 open-upward，避免收起动画期间翻锚导致 Logo 闪现。期间若又展开则跳过。
+   */
+  private scheduleCollapseReset(): void {
+    const reset = (): void => {
+      this.cancelCollapseReset();
+      if (this.controller.getState().expanded) return; // 过渡期间又展开：不翻锚
+      this.toolbar.classList.remove('open-upward');
+      this.applyPos();
+    };
+    this.onCollapseEnd = (ev: TransitionEvent): void => {
+      if (ev.target === this.toolbar && ev.propertyName === 'opacity') reset();
+    };
+    this.toolbar.addEventListener('transitionend', this.onCollapseEnd);
+    // 兜底：transitionend 未触发（缩减动效/打断/无过渡）时仍恢复底锚
+    this.collapseTimer = window.setTimeout(reset, 320);
   }
 
   // ---- 创建 DOM ----
