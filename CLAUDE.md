@@ -4,7 +4,7 @@
 
 ## 仓库当前阶段
 
-**🎉 V1 全 15 阶段代码闭环完成，全部合并 main。** 设计系统已就绪（[preview/](preview/) 画廊 + [docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施完毕。**剩余为用户手动冒烟（[docs/manual-smoke-checklist.md](docs/manual-smoke-checklist.md)，71 项）+ 打包上架。**
+**🎉 V1 全 15 阶段代码闭环完成，全部合并 main。** 设计系统已就绪（[docs/design-system.md](docs/design-system.md)），按 [docs/v1-plan.md](docs/v1-plan.md) 的 15 个阶段逐阶段实施完毕。**剩余为用户手动冒烟（[docs/manual-smoke-checklist.md](docs/manual-smoke-checklist.md)，71 项）+ 打包上架。**
 
 > **2026-07-04：已完成「7.3.1 用户反馈第一轮」修复**（约 50 条真机反馈，拆 7 组顺序实施，含 docs 共 12 个提交在本地 main）。用户拍板：批注模式右键拦截系统菜单、移动吸附=真实 DOM 重父嵌入、快捷键完整重绑、批注模式单击出可交互八句柄框（与移动模式统一）。终态 vitest 351 / 全量 E2E 101/101 ×2。详见 [CHANGELOG](CHANGELOG.md) Bugfix 段与 [HANDOFF §8](HANDOFF.md)。
 
@@ -39,7 +39,7 @@
 - `src/` + `public/` + `scripts/` — 扩展源码、静态资源（manifest/_locales/icons/brand）、构建脚本
 - `docs/` — V1 实施计划、设计系统、UI 预览裁决记录、项目规范
 - `context/` — 构想蓝图文件（`构想蓝图2.md` 为产品规格的完整定义）
-- `preview/` — UI 组件画廊（设计阶段产物，含设计令牌 CSS 和 Web Components 原件）
+- `preview/` — UI 组件画廊（**已失真，仅存档，不作编码参考**）
 
 ## PigeonDeck 是什么
 
@@ -52,7 +52,7 @@
 - [docs/design-system.md](docs/design-system.md) — 设计令牌、UI 组件配方、控件规格的详细参考。编码 UI 时的视觉真相源。
 - [docs/ui-preview-rulings.md](docs/ui-preview-rulings.md) — UI 预览 11 轮裁决记录（控件/布局层面的历史决策，实施参考）。
 - [docs/conventions/INDEX.md](docs/conventions/INDEX.md) — 项目规范索引（颗粒化规范）。
-- [preview/](preview/) — UI 组件画廊。`pigeonlib.css`（设计令牌 + 控件配方）+ `pigeon-components.js`（Web Components 原件）+ `index.html`（画廊宿主）+ `parts/`（38 个 UI 表面卡）。
+- [preview/](preview/) — UI 组件画廊（**已失真，仅存档，不作编码参考**；视觉真相源见 [docs/design-system.md](docs/design-system.md)）。
 
 ## 目标工程形态
 

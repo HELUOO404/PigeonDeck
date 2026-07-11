@@ -106,6 +106,18 @@ describe('createControl / createPropRow — 实例化', () => {
     expect(row.querySelector('.pd-color')).toBeTruthy();
   });
 
+  it('propRow 变更说明把页面样式值当文本渲染，不解析成 HTML', () => {
+    target.style.fontFamily = 'Arial';
+    const session = new FieldsSession(target);
+    const row = createPropRow(session, 'font', ctx);
+
+    session.set('font', '"><img src=x>');
+
+    const diff = row.querySelector('.pd-diff')!;
+    expect(diff.textContent).toContain('"><img src=x>');
+    expect(diff.querySelector('img')).toBeNull();
+  });
+
   it('未知字段抛错', () => {
     expect(() => createControl(new FieldsSession(target), 'nope', ctx)).toThrow();
   });

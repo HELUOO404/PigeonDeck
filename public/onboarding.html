@@ -128,6 +128,33 @@
     .feat .name { font-weight: 600; font-size: 16.5px; margin-bottom: 7px; }
     .feat .desc { color: var(--ink2); font-size: 14px; line-height: 1.62; }
 
+    /* ---------- keyboard ---------- */
+    .kbd-groups { display: grid; grid-template-columns: repeat(2, 1fr); gap: 24px; max-width: 1000px; margin: 0 auto; }
+    .kbd-group {
+      background: var(--card); border: 1px solid var(--edge);
+      border-radius: 16px; padding: 26px 26px 22px; box-shadow: var(--sh);
+    }
+    .kbd-group h3 {
+      font-family: var(--font-serif); font-weight: 600; font-size: 17px;
+      margin: 0 0 16px; letter-spacing: -0.01em; color: var(--ink);
+    }
+    .kbd-row { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; }
+    .kbd-row + .kbd-row { border-top: 1px solid var(--edge); }
+    .kbd-row .keys { flex: none; min-width: 132px; display: flex; flex-wrap: wrap; gap: 5px; }
+    kbd {
+      display: inline-block; font-family: var(--font-ui); font-size: 12px; font-weight: 600;
+      line-height: 1.4; color: var(--ink); background: var(--bg2);
+      border: 1px solid var(--edge); border-bottom-width: 2px; border-radius: 7px;
+      padding: 2px 7px; box-shadow: var(--sh); white-space: nowrap;
+    }
+    .kbd-row .plus { color: var(--ink2); font-size: 12px; align-self: center; }
+    .kbd-row .desc { color: var(--ink2); font-size: 14px; line-height: 1.6; }
+    .kbd-note {
+      max-width: 1000px; margin: 26px auto 0; text-align: center;
+      font-size: 13.5px; color: var(--ink2);
+    }
+    .kbd-note b { color: var(--gold-deep); font-weight: 600; }
+
     /* ---------- closing / cta ---------- */
     .cta {
       max-width: 1000px; margin: 0 auto; text-align: center;
@@ -165,6 +192,7 @@
       .step-row .media, .step-row:nth-child(even) .media { order: 1; }
       .step-row .copy, .step-row:nth-child(even) .copy { order: 2; }
       .features { grid-template-columns: 1fr; }
+      .kbd-groups { grid-template-columns: 1fr; }
       .sec-head h2 { font-size: 26px; }
       section.wrap { padding-top: 54px; padding-bottom: 54px; }
       .cta { padding: 52px 28px; }
@@ -275,6 +303,57 @@
         <div class="desc" data-i18n="onboarding_feat_copyimage_desc">Export a single annotated long screenshot.</div>
       </div>
     </div>
+  </section>
+
+  <!-- ===================== KEYBOARD ===================== -->
+  <section class="wrap">
+    <div class="sec-head">
+      <p class="eyebrow" data-i18n="onboarding_kbd_title">Keyboard</p>
+      <h2 data-i18n="onboarding_kbd_head">Every key, at a glance</h2>
+    </div>
+    <div class="kbd-groups">
+      <div class="kbd-group">
+        <h3 data-i18n="onboarding_kbd_cat_global">Global</h3>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Ctrl/⌘</kbd><span class="plus">+</span><kbd>Z</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_undo">Undo the last action (toolbar open).</span>
+        </div>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Ctrl/⌘</kbd><span class="plus">+</span><kbd>Shift</kbd><span class="plus">+</span><kbd>Z</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_redo">Redo what you just undid.</span>
+        </div>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Esc</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_esc">Close the top layer, then the panel, then exit the current mode.</span>
+        </div>
+      </div>
+      <div class="kbd-group">
+        <h3 data-i18n="onboarding_kbd_cat_editing">Editing</h3>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Ctrl/⌘</kbd><span class="plus">+</span><kbd>Enter</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_save">Save the note or commit a text / style edit.</span>
+        </div>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Enter</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_enter">New line inside a note — it does not submit.</span>
+        </div>
+      </div>
+      <div class="kbd-group">
+        <h3 data-i18n="onboarding_kbd_cat_selection">Selection</h3>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Delete</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_delete">Remove the selected element (undoable).</span>
+        </div>
+      </div>
+      <div class="kbd-group">
+        <h3 data-i18n="onboarding_kbd_cat_move">Move</h3>
+        <div class="kbd-row">
+          <span class="keys"><kbd>Alt</kbd></span>
+          <span class="desc" data-i18n="onboarding_kbd_alt">Hold while dragging for free move — temporarily bypasses snapping.</span>
+        </div>
+      </div>
+    </div>
+    <p class="kbd-note" data-i18n="onboarding_kbd_note">Rebind any of these in Settings → Shortcuts.</p>
   </section>
 
   <!-- ===================== CLOSING ===================== -->

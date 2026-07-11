@@ -23,6 +23,11 @@ function reportError(msg) {
   hasError = true;
 }
 
+async function sourceContains(relPath, pattern) {
+  const content = await fs.readFile(path.join(__dirname, '..', relPath), 'utf8');
+  return pattern.test(content);
+}
+
 // 读取基准（en）
 const enPath = path.join(localesDir, 'en', 'messages.json');
 const enMessages = await readJSON(enPath);
@@ -74,6 +79,30 @@ for (const locale of localeDirs) {
 for (const locale of registeredLocales) {
   if (!localeDirs.includes(locale)) {
     reportError(`Locale "${locale}" is registered in AVAILABLE_LANGUAGES.json but has no directory in _locales/`);
+  }
+}
+
+const sourceGuardrails = [
+  {
+    file: 'src/content/fields.ts',
+    pattern: /innerHTML\s*=\s*`[^`]*\$\{diff\./s,
+    message: 'fields.ts must render diff values with text nodes, not dynamic innerHTML.',
+  },
+  {
+    file: 'src/content/inline-richtext.ts',
+    pattern: /label:\s*'(?:Left|Center|Right)'/,
+    message: 'inline-richtext.ts align labels must use i18n keys, not hard-coded English.',
+  },
+  {
+    file: 'src/content/toolbar.ts',
+    pattern: /\blocalStorage\./,
+    message: 'toolbar.ts must persist position in extension storage, not page localStorage.',
+  },
+];
+
+for (const guard of sourceGuardrails) {
+  if (await sourceContains(guard.file, guard.pattern)) {
+    reportError(guard.message);
   }
 }
 

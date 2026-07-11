@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AnnotationStore } from '../state/annotations';
 import { History } from '../state/history';
+import { DEFAULT_SETTINGS } from '../state/settings';
 import { SelectionBox } from './selection-box';
 
 interface Context {
@@ -26,7 +27,7 @@ function setup(): Context {
 
   const store = new AnnotationStore();
   const history = new History();
-  const box = new SelectionBox({ store, history, overlayLayer: overlay });
+  const box = new SelectionBox({ store, history, overlayLayer: overlay, settings: DEFAULT_SETTINGS });
   box.select(target);
   return { box, history, store, target, before, after };
 }

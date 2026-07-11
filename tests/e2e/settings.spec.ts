@@ -174,6 +174,9 @@ test('② 切 4 个导航分区 → 内容切换', async () => {
   await clickShadowEl(page, 'pd-set-nav-interaction');
   await waitShadowVisible(page, '[data-testid="pd-set-longpress"]');
 
+  await clickShadowEl(page, 'pd-set-nav-shortcuts');
+  await waitShadowVisible(page, '[data-testid="pd-sc-record-undo"]');
+
   await clickShadowEl(page, 'pd-set-nav-output');
   await waitShadowVisible(page, '[data-testid="pd-set-imgmethod-clipboard"]');
 
@@ -404,14 +407,14 @@ test('⑫ 关「显示修改栏」→ 批注面板无修改栏、仅留说明（
 // W6b：快捷键全量重绑（录制 / 冲突 / 恢复默认）
 // ============================================================
 
-/** 打开设置 → 交互分区 → 等快捷键录制按钮就绪 */
+/** 打开设置 → 快捷键分区 → 等快捷键录制按钮就绪 */
 async function openShortcuts(page: Page): Promise<void> {
   await openSettings(page);
-  await clickShadowEl(page, 'pd-set-nav-interaction');
+  await clickShadowEl(page, 'pd-set-nav-shortcuts');
   await waitShadowVisible(page, '[data-testid="pd-sc-record-undo"]');
 }
 
-/** 交互分区可滚动（max-height 300px），底部行需先滚入视口再按坐标点击 */
+/** 快捷键分区可滚动（固定高度），底部行需先滚入视口再按坐标点击 */
 async function clickShadowDeep(page: Page, testId: string): Promise<void> {
   await page.evaluate((id: string) => {
     const host = document.getElementById('pd-host');
@@ -478,6 +481,48 @@ test('⑮ 恢复默认 → 绑定回落 Mod+Z / Mod+Shift+Z / Escape', async () 
     .poll(() => storedShortcuts(), { timeout: 5000 })
     .toMatchObject({ undo: 'Mod+Z', redo: 'Mod+Shift+Z', exit: 'Escape' });
   await expect.poll(() => shadowText(page, 'pd-sc-combo-undo'), { timeout: 5000 }).toContain('Z');
+
+  await page.close();
+});
+
+test('⑯ 录制删除元素绑定 → 持久化到 storage', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  await clickShadowDeep(page, 'pd-sc-record-delete');
+  await page.keyboard.press('Backspace'); // → Backspace
+
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ delete: 'Backspace' });
+
+  await page.close();
+});
+
+test('⑰ 保存绑定要求修饰键 → 裸 Enter 被拒、绑定不变', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  await clickShadowDeep(page, 'pd-sc-record-save');
+  await page.keyboard.press('Enter'); // 无修饰键 → 护栏拒绝
+
+  // 护栏提示出现
+  await waitShadowVisible(page, '[data-testid="pd-toast"]');
+  // save 绑定仍为默认 Mod+Enter（行内展示 = Ctrl/⌘ + Enter，未被裸 Enter 改写）
+  const saveCombo = await shadowText(page, 'pd-sc-combo-save');
+  expect(saveCombo).toContain('Enter');
+  expect(saveCombo).toContain('Ctrl');
+
+  await page.close();
+});
+
+test('⑱ 自由移动修饰键选择器 → 切换写入 storage', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await openShortcuts(page);
+
+  await clickShadowDeep(page, 'pd-sc-mod-moveFree-Shift');
+  await expect.poll(() => storedShortcuts(), { timeout: 5000 }).toMatchObject({ moveFree: 'Shift' });
 
   await page.close();
 });

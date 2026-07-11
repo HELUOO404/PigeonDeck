@@ -4,6 +4,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_SETTINGS, clampNumber, Settings } from './settings';
+import { buildDefaultShortcuts } from './shortcuts-def';
 
 describe('DEFAULT_SETTINGS — 阶段 11 新字段', () => {
   it('theme 默认 light', () => {
@@ -33,6 +34,27 @@ describe('DEFAULT_SETTINGS — 阶段 11 新字段', () => {
 
   it('showModbar 默认开启（建议7）', () => {
     expect(DEFAULT_SETTINGS.showModbar).toBe(true);
+  });
+
+  it('toolbarPosition 默认不持久化位置', () => {
+    expect(DEFAULT_SETTINGS.toolbarPosition).toBeNull();
+  });
+
+  it('shortcuts 默认含 registry 全部 id', () => {
+    expect(DEFAULT_SETTINGS.shortcuts).toEqual(buildDefaultShortcuts());
+    expect(DEFAULT_SETTINGS.shortcuts.undo).toBe('Mod+Z');
+    expect(DEFAULT_SETTINGS.shortcuts.delete).toBe('Delete');
+    expect(DEFAULT_SETTINGS.shortcuts.moveFree).toBe('Alt');
+  });
+
+  it('旧存储 {undo,redo,exit} 迁移：保留旧值 + 补全新 id（loadSettings 语义）', () => {
+    const storedShortcuts = { undo: 'Mod+Y', redo: 'Mod+Shift+Z', exit: 'Escape' };
+    // 复刻 loadSettings 的 shortcuts 合并行：registry 默认打底，旧值覆盖
+    const merged = { ...buildDefaultShortcuts(), ...storedShortcuts };
+    expect(merged.undo).toBe('Mod+Y'); // 旧自定义值保留
+    expect(merged.save).toBe('Mod+Enter'); // 新 id 补默认
+    expect(merged.delete).toBe('Delete');
+    expect(merged.moveFree).toBe('Alt');
   });
 
   it('部分存储值与默认值合并：缺失字段回退默认（loadSettings 语义）', () => {

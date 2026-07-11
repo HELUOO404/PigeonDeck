@@ -20,6 +20,7 @@ import { buildSelector, isVisible } from '../shared/dom-utils';
 import { snapDrag, Rect, Guide } from './snap';
 import { pickDropTarget, pickInsertIndex, parseTranslate } from './embed';
 import { pushEsc } from './esc-stack';
+import { eventHasModifier } from './shortcuts';
 import { t } from './i18n';
 
 /** 吸附阈值（px，蓝图 §4.3） */
@@ -157,6 +158,7 @@ export class MoveManager {
       store: opts.store,
       history: opts.history,
       overlayLayer: opts.overlayLayer,
+      settings: opts.settings,
     });
 
     this.unsubscribeController = opts.controller.subscribe(() => this.syncActive());
@@ -359,7 +361,7 @@ export class MoveManager {
     this.moveStartY = ev.clientY;
     this.moveDx = 0;
     this.moveDy = 0;
-    this.moveFree = ev.altKey;
+    this.moveFree = eventHasModifier(ev, this.settings.shortcuts.moveFree);
     this.moveSnapSemantic = null;
     this.moveOrigRect = this.selectedEl.getBoundingClientRect();
     this.moveOrigInlineTransform = this.selectedEl.style.transform;
@@ -393,7 +395,7 @@ export class MoveManager {
     // 未达防误触阈值：吞掉页面默认行为但不触发位移
     if (!this.moveArmed) return;
 
-    this.moveFree = ev.altKey; // 实时监听 Alt
+    this.moveFree = eventHasModifier(ev, this.settings.shortcuts.moveFree); // 实时监听自由移动修饰键
     const rawDx = ev.clientX - this.moveStartX;
     const rawDy = ev.clientY - this.moveStartY;
 

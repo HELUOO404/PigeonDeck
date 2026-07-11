@@ -9,6 +9,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import { resolveFontStack, FONT_LIST, RichTextBar } from './inline-richtext';
+import { setLocale } from './i18n';
 
 describe('resolveFontStack', () => {
   it('FONT_LIST 命中：返回其带兜底的栈', () => {
@@ -112,6 +113,17 @@ describe('RichTextBar — 应用即记录', () => {
     expect(changes[0].summary.length).toBeGreaterThan(0);
     const span = editEl.querySelector('span');
     expect(span?.style.fontWeight).toBe('700');
+  });
+
+  it('对齐下拉选项走当前界面语言翻译', async () => {
+    await setLocale('zh_CN');
+    setup();
+
+    panelLayer.querySelector<HTMLButtonElement>('[data-testid="pd-rt-align"]')!.click();
+
+    const labels = [...panelLayer.querySelectorAll('[data-testid="pd-dd-item"] .nm')].map((el) => el.textContent);
+    expect(labels).toEqual(expect.arrayContaining(['左', '居中', '右']));
+    expect(labels).not.toContain('Left');
   });
 
   it('字号（选区）：包 span，记 target=selection/new=32px（!important 稳压宿主）', () => {

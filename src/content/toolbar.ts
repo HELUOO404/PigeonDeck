@@ -8,8 +8,7 @@ import { Controller } from './controller';
 import { t } from './i18n';
 import { History } from '../state/history';
 import { LOGO_SVG } from './logo';
-
-const POS_KEY = 'pigeondeck.pos';
+import { saveSettings, Settings } from '../state/settings';
 
 /** 默认右下角 16px */
 const DEFAULT_RIGHT = 16;
@@ -39,27 +38,28 @@ interface Pos {
   bottom: number;
 }
 
-function loadPos(): Pos {
-  try {
-    const raw = localStorage.getItem(POS_KEY);
-    if (raw) {
-      const p = JSON.parse(raw) as Pos;
-      if (typeof p.right === 'number' && typeof p.bottom === 'number') {
-        return p;
-      }
-    }
-  } catch {
-    // 静默失败
-  }
+function isPos(value: unknown): value is Pos {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    Number.isFinite((value as Pos).right) &&
+    Number.isFinite((value as Pos).bottom)
+  );
+}
+
+function loadPos(settings: Settings): Pos {
+  if (isPos(settings.toolbarPosition)) return settings.toolbarPosition;
   return { right: DEFAULT_RIGHT, bottom: DEFAULT_BOTTOM };
 }
 
-function savePos(pos: Pos): void {
-  try {
-    localStorage.setItem(POS_KEY, JSON.stringify(pos));
-  } catch {
-    // 静默失败
-  }
+function savePos(settings: Settings, pos: Pos): void {
+  settings.toolbarPosition = { ...pos };
+  void saveSettings({ toolbarPosition: settings.toolbarPosition });
+}
+
+function clearPos(settings: Settings): void {
+  settings.toolbarPosition = null;
+  void saveSettings({ toolbarPosition: null });
 }
 
 /** 夹紧坐标在视口内（考虑容器尺寸） */
@@ -75,6 +75,7 @@ function clampPos(right: number, bottom: number, w: number, h: number): Pos {
 export class Toolbar {
   private controller: Controller;
   private history: History;
+  private settings: Settings;
   private root: HTMLElement; // control 层根容器
   /** 拖拽真正开始时的回调（INVARIANT 3：关闭工具盘派生的面板/浮层，不动内容面板）。 */
   private onDragStart?: () => void;
@@ -101,12 +102,19 @@ export class Toolbar {
   // 仅真·展开→收起才播收起动画（初始/非过渡收起态直接规范化，不设类/定时器，免扰早期拖拽）
   private wasExpanded = false;
 
-  constructor(controller: Controller, controlLayer: HTMLElement, history: History, onDragStart?: () => void) {
+  constructor(
+    controller: Controller,
+    controlLayer: HTMLElement,
+    history: History,
+    settings: Settings,
+    onDragStart?: () => void
+  ) {
     this.controller = controller;
     this.history = history;
+    this.settings = settings;
     this.root = controlLayer;
     this.onDragStart = onDragStart;
-    this.pos = loadPos();
+    this.pos = loadPos(settings);
 
     this.wrapper = document.createElement('div');
     this.wrapper.className = 'pd-wrapper';
@@ -144,11 +152,7 @@ export class Toolbar {
   resetPosition(): void {
     this.pos = { right: DEFAULT_RIGHT, bottom: DEFAULT_BOTTOM };
     this.applyPos();
-    try {
-      localStorage.removeItem(POS_KEY);
-    } catch {
-      // 静默失败
-    }
+    clearPos(this.settings);
     if (this.controller.getState().expanded) {
       this.updateToolbarDirection();
     }
@@ -471,7 +475,7 @@ export class Toolbar {
     this.dragActive = false;
 
     if (this.dragMoved) {
-      savePos(this.pos);
+      savePos(this.settings, this.pos);
       // 展开后重计方向（拖拽中为底锚，松手回正确方向）
       if (this.controller.getState().expanded) {
         this.updateToolbarDirection();

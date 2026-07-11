@@ -7,7 +7,7 @@
    ============================================================ */
 
 import { Controller } from './controller';
-import { Settings, DEFAULT_SETTINGS, saveSettings, clampNumber } from '../state/settings';
+import { Settings, saveSettings, clampNumber } from '../state/settings';
 import { Overlay } from './overlay';
 import { History } from '../state/history';
 import { SelectionResolver } from './selection';
@@ -21,6 +21,16 @@ import { makeDraggableByHandle } from './floating-drag';
 import { BCP47_LANGUAGES } from '../shared/languages';
 import { LOGO_SVG } from './logo';
 import { formatCombo, setShortcutRecording } from './shortcuts';
+import {
+  SHORTCUT_DEFS,
+  ShortcutId,
+  ShortcutDef,
+  ShortcutCategory,
+  MODIFIER_TOKENS,
+  buildDefaultShortcuts,
+  comboHasModifier,
+  findShortcutConflict,
+} from '../state/shortcuts-def';
 
 /** 扩展版本号（about 区展示；manifest 为发布号，V1 展示固定 1.0.0） */
 const VERSION = '1.0.0';
@@ -38,6 +48,8 @@ const IC = {
     '<path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" x2="12" y1="2" y2="15"/>',
   navHelp:
     '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" x2="12.01" y1="17" y2="17"/>',
+  navShortcuts:
+    '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="M6 8h.01"/><path d="M10 8h.01"/><path d="M14 8h.01"/><path d="M18 8h.01"/><path d="M8 12h.01"/><path d="M12 12h.01"/><path d="M16 12h.01"/><path d="M7 16h10"/>',
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.3 17.7-1.4 1.4"/><path d="m19.1 4.9-1.4 1.4"/>',
   moon: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   clipboard:
@@ -48,13 +60,13 @@ const IC = {
   minus: '<path d="M5 12h14"/>',
 } as const;
 
-type Section = 'general' | 'interaction' | 'output' | 'help';
+type Section = 'general' | 'interaction' | 'shortcuts' | 'output' | 'help';
 
-/** combo 串 → 可读展示：Mod → Ctrl/⌘、Escape → Esc，段间加空格（快捷键名不翻译）。 */
+/** combo 串 → 可读展示：Mod → Ctrl/⌘、Meta → ⌘、Escape → Esc，段间加空格（快捷键名不翻译）。 */
 function displayCombo(combo: string): string {
   return combo
     .split('+')
-    .map((p) => (p === 'Mod' ? 'Ctrl/⌘' : p === 'Escape' ? 'Esc' : p))
+    .map((p) => (p === 'Mod' ? 'Ctrl/⌘' : p === 'Meta' ? '⌘' : p === 'Escape' ? 'Esc' : p))
     .join(' + ');
 }
 
@@ -93,7 +105,7 @@ export class SettingsManager {
   private unsubscribe: () => void;
 
   /** 当前正在录制的快捷键动作（null = 未录制）+ 卸载录制监听器的函数。 */
-  private recordingAction: 'undo' | 'redo' | 'exit' | null = null;
+  private recordingAction: ShortcutId | null = null;
   private recordingCleanup: (() => void) | null = null;
 
   constructor(opts: SettingsManagerOptions) {
@@ -164,6 +176,7 @@ export class SettingsManager {
     const navDefs: Array<[Section, string, string]> = [
       ['general', IC.navGeneral, t('set_nav_general')],
       ['interaction', IC.navInteraction, t('set_nav_interaction')],
+      ['shortcuts', IC.navShortcuts, t('set_nav_shortcuts')],
       ['output', IC.navOutput, t('set_nav_output')],
       ['help', IC.navHelp, t('set_nav_help')],
     ];
@@ -272,6 +285,10 @@ export class SettingsManager {
       case 'interaction':
         cat.textContent = t('set_nav_interaction');
         this.renderInteraction(this.sconEl);
+        break;
+      case 'shortcuts':
+        cat.textContent = t('set_nav_shortcuts');
+        this.renderShortcuts(this.sconEl);
         break;
       case 'output':
         cat.textContent = t('set_nav_output');
@@ -437,12 +454,9 @@ export class SettingsManager {
         })
       )
     );
-
-    // 快捷键（建议6：每个动作一行，可录制重绑 + 冲突检测 + 恢复默认）
-    this.renderShortcuts(root);
   }
 
-  /** 快捷键分区：组头（含恢复默认）+ 撤销/重做/退出工具各一行。 */
+  /** 快捷键分区（registry 驱动）：组头（含恢复默认）+ 按分类分组，每条一行（combo 可录制重绑 / modifier 分段选择）。 */
   private renderShortcuts(root: HTMLElement): void {
     const resetBtn = document.createElement('button');
     resetBtn.className = 'pd-btn';
@@ -450,22 +464,32 @@ export class SettingsManager {
     resetBtn.textContent = t('set_sc_reset');
     resetBtn.addEventListener('click', () => {
       this.cancelRecording();
-      this.settings.shortcuts = { ...DEFAULT_SETTINGS.shortcuts };
+      this.settings.shortcuts = buildDefaultShortcuts();
       saveSettings({ shortcuts: { ...this.settings.shortcuts } });
       this.renderSection();
     });
     root.appendChild(this.srow(t('set_shortcuts'), t('set_shortcuts_sub'), resetBtn));
 
-    const actions: Array<{ key: 'undo' | 'redo' | 'exit'; label: string }> = [
-      { key: 'undo', label: t('tb_undo') },
-      { key: 'redo', label: t('tb_redo') },
-      { key: 'exit', label: t('set_sc_exit') },
-    ];
-    for (const a of actions) root.appendChild(this.shortcutRow(a.key, a.label));
+    // 按分类分组渲染（顺序照 SHORTCUT_DEFS 出现顺序）
+    let lastCat: ShortcutCategory | null = null;
+    for (const def of SHORTCUT_DEFS) {
+      if (def.category !== lastCat) {
+        const sub = document.createElement('div');
+        sub.className = 'scat';
+        sub.textContent = t('set_sc_cat_' + def.category);
+        root.appendChild(sub);
+        lastCat = def.category;
+      }
+      root.appendChild(
+        def.kind === 'modifier'
+          ? this.modifierRow(def.id, t(def.labelKey))
+          : this.shortcutRow(def.id, t(def.labelKey))
+      );
+    }
   }
 
-  /** 单条快捷键行：动作名 + 当前组合展示 + 录制按钮。 */
-  private shortcutRow(action: 'undo' | 'redo' | 'exit', label: string): HTMLElement {
+  /** 单条组合键行：动作名 + 当前组合展示 + 录制按钮。 */
+  private shortcutRow(action: ShortcutId, label: string): HTMLElement {
     const ctl = document.createElement('div');
     ctl.className = 'pd-sc-ctl';
 
@@ -485,8 +509,25 @@ export class SettingsManager {
     return this.srow(label, null, ctl);
   }
 
-  /** 进入录制：一次性 capture keydown 监听，捕获完整组合后校验冲突并保存。 */
-  private startRecording(action: 'undo' | 'redo' | 'exit', recBtn: HTMLButtonElement): void {
+  /** 单条修饰键行（如 Alt 自由移动）：分段选择器切换按住哪个修饰键。 */
+  private modifierRow(action: ShortcutId, label: string): HTMLElement {
+    const seg = this.segText(
+      MODIFIER_TOKENS.map((token) => ({
+        value: token,
+        label: displayCombo(token),
+        testid: `pd-sc-mod-${action}-${token}`,
+      })),
+      this.settings.shortcuts[action],
+      (value) => {
+        this.settings.shortcuts[action] = value;
+        saveSettings({ shortcuts: { ...this.settings.shortcuts } });
+      }
+    );
+    return this.srow(label, null, seg);
+  }
+
+  /** 进入录制：一次性 capture keydown 监听，捕获完整组合后校验护栏/冲突并保存。 */
+  private startRecording(action: ShortcutId, recBtn: HTMLButtonElement): void {
     // 再次点同一按钮 → 取消录制
     if (this.recordingAction === action) {
       this.cancelRecording();
@@ -506,11 +547,16 @@ export class SettingsManager {
       const combo = formatCombo(e);
       if (!combo) return; // 仅按下修饰键，继续等待主键
 
-      // 冲突检测：与其它动作现有绑定相同则拒绝（重绑到自身现值不算冲突）
-      const conflict = (['undo', 'redo', 'exit'] as const).some(
-        (k) => k !== action && this.settings.shortcuts[k].toLowerCase() === combo.toLowerCase()
-      );
-      if (conflict) {
+      // 护栏：requireModifier 的动作（如 save）拒绝无修饰键的组合（防裸 Enter 吞换行）
+      const def = SHORTCUT_DEFS.find((d) => d.id === action) as ShortcutDef | undefined;
+      if (def?.requireModifier && !comboHasModifier(combo)) {
+        this.toast.show(t('set_sc_need_modifier'));
+        this.cancelRecording();
+        return;
+      }
+
+      // 冲突检测（registry 驱动）：与其它组合键动作现有绑定相同则拒绝（重绑到自身现值不算冲突）
+      if (findShortcutConflict(this.settings.shortcuts, action, combo)) {
         this.toast.show(t('toast_sc_conflict'));
         this.cancelRecording();
         return;
@@ -621,12 +667,24 @@ export class SettingsManager {
     updateBtn.addEventListener('click', () => this.toast.show(t('toast_update_latest'), 'ok'));
     root.appendChild(this.srow(t('set_check_update'), t('set_check_update_sub'), updateBtn));
 
-    // 反馈与问题（V1 占位）
+    // GitHub 主页
+    const githubBtn = document.createElement('button');
+    githubBtn.className = 'pd-btn';
+    githubBtn.setAttribute('data-testid', 'pd-set-github');
+    githubBtn.textContent = t('set_github_btn');
+    githubBtn.addEventListener('click', () =>
+      window.open('https://github.com/Pigeon-Pub/PigeonDeck', '_blank', 'noopener')
+    );
+    root.appendChild(this.srow(t('set_github'), t('set_github_sub'), githubBtn));
+
+    // 反馈与问题 → 跳 GitHub issues
     const feedbackBtn = document.createElement('button');
     feedbackBtn.className = 'pd-btn';
     feedbackBtn.setAttribute('data-testid', 'pd-set-feedback');
     feedbackBtn.textContent = t('set_feedback_btn');
-    feedbackBtn.addEventListener('click', () => this.toast.show(t('toast_coming_soon')));
+    feedbackBtn.addEventListener('click', () =>
+      window.open('https://github.com/Pigeon-Pub/PigeonDeck/issues', '_blank', 'noopener')
+    );
     root.appendChild(this.srow(t('set_feedback'), null, feedbackBtn));
 
     // 关于区

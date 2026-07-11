@@ -28,6 +28,7 @@ import type { PanelManager } from './panel';
 import { applyChangesTo } from './change-apply';
 import { RichTextBar } from './inline-richtext';
 import { openReplaceMedia } from './replace-media';
+import { matchCombo } from './shortcuts';
 import { buildSelector, classifyElement, getElementSummary } from '../shared/dom-utils';
 
 /** 富文本 DOM 还原快照序列化（editEl innerHTML + 自身 text-align） */
@@ -61,6 +62,7 @@ export class DirectEditManager {
   private history: History;
   private panelLayer: HTMLElement;
   private panel: PanelManager;
+  private settings: Settings;
 
   /** 当前正在编辑的元素（null = 未在编辑） */
   private editEl: HTMLElement | null = null;
@@ -95,6 +97,7 @@ export class DirectEditManager {
     this.history = opts.history;
     this.panelLayer = opts.panelLayer;
     this.panel = opts.panel;
+    this.settings = opts.settings;
     this.shadowHost = (opts.panelLayer.getRootNode() as ShadowRoot).host;
 
     // N8：把「替换图片/视频」入口注册到 PanelManager，供批注面板 replaceImg 控件按钮调用。
@@ -169,8 +172,8 @@ export class DirectEditManager {
       this.exitEdit(false); // Esc = 丢弃，还原进入前状态、不记录
       return;
     }
-    // F21：Ctrl/Cmd+Enter = 提交（与保存对勾等价；普通 Enter 仍在块内换行）
-    if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+    // F21：保存快捷键（默认 Ctrl/Cmd+Enter）= 提交（与保存对勾等价；普通 Enter 仍在块内换行）
+    if (matchCombo(ev, this.settings.shortcuts.save)) {
       ev.preventDefault();
       ev.stopPropagation();
       this.exitEdit(true);

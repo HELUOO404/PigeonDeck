@@ -10,8 +10,10 @@
 
 import { AnnotationStore, StyleChange, mergeChanges } from '../state/annotations';
 import { History } from '../state/history';
+import { Settings } from '../state/settings';
 import { buildSelector } from '../shared/dom-utils';
 import { applyChangesTo } from './change-apply';
+import { matchCombo } from './shortcuts';
 
 /** 八向句柄方位 */
 type HandleDir = 'tl' | 'tr' | 'bl' | 'br' | 'tm' | 'bm' | 'ml' | 'mr';
@@ -43,6 +45,8 @@ export interface SelectionBoxOptions {
   store: AnnotationStore;
   history: History;
   overlayLayer: HTMLElement;
+  /** 设置（读 shortcuts.delete 绑定；共享引用，改绑即时生效）。 */
+  settings: Settings;
   /** 句柄缩放提交后回调（拥有者可据此同步自身状态，如面板刷新已有标注引用） */
   onAfterResize?: (el: HTMLElement) => void;
 }
@@ -51,6 +55,7 @@ export class SelectionBox {
   private store: AnnotationStore;
   private history: History;
   private overlayLayer: HTMLElement;
+  private settings: Settings;
   private onAfterResize?: (el: HTMLElement) => void;
 
   // 当前选中
@@ -73,6 +78,7 @@ export class SelectionBox {
     this.store = opts.store;
     this.history = opts.history;
     this.overlayLayer = opts.overlayLayer;
+    this.settings = opts.settings;
     this.onAfterResize = opts.onAfterResize;
 
     // 撤销/重做改动 el.style.transform 或重父后，选中框必须跟随（move.ts Bug1/显示15）。
@@ -168,7 +174,7 @@ export class SelectionBox {
   };
 
   private onKeyDown = (ev: KeyboardEvent): void => {
-    if (ev.defaultPrevented || ev.key !== 'Delete' || !this.selectedEl?.isConnected) return;
+    if (ev.defaultPrevented || !matchCombo(ev, this.settings.shortcuts.delete) || !this.selectedEl?.isConnected) return;
     if (ev.composedPath().some((node) => this.isEditable(node))) return;
 
     const el = this.selectedEl;

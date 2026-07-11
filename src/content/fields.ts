@@ -1051,7 +1051,13 @@ export function createPropRow(
     if (!diff) return;
     const span = document.createElement('span');
     span.className = 'pd-diff';
-    span.innerHTML = `${diff.from}<i>→</i><b>${diff.to}</b>`;
+    span.appendChild(document.createTextNode(diff.from));
+    const arrow = document.createElement('i');
+    arrow.textContent = '→';
+    span.appendChild(arrow);
+    const to = document.createElement('b');
+    to.textContent = diff.to;
+    span.appendChild(to);
     head.appendChild(span);
   };
   renderDiff();

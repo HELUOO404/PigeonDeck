@@ -16,6 +16,7 @@ import { buildOperations, renderTaskList, PageContext } from './format';
 import { closeAllPopovers, PopoverHandle } from './popover';
 import { openDropdown } from './dropdown';
 import { makeDraggableByHandle } from './floating-drag';
+import { matchCombo } from './shortcuts';
 
 /** 结果弹窗宽度（part 37 .opanel） */
 const PANEL_WIDTH = 452;
@@ -240,8 +241,8 @@ export class CopyTextManager {
         this.closePanel();
         return;
       }
-      // INVARIANT 4：Ctrl/Cmd+Enter = 提交（可编辑预览的「提交」= 复制到剪贴板，与编辑面板统一）
-      if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+      // INVARIANT 4：保存快捷键（默认 Ctrl/Cmd+Enter）= 提交（可编辑预览的「提交」= 复制到剪贴板，与编辑面板统一）
+      if (matchCombo(ev, this.settings.shortcuts.save)) {
         ev.preventDefault();
         ev.stopPropagation();
         this.writeClipboard(this.liveText());

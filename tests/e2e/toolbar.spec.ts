@@ -34,11 +34,26 @@ test.afterAll(async () => {
   await server.close();
 });
 
+async function resetToolbarPosition() {
+  const worker = context.serviceWorkers()[0];
+  if (!worker) return;
+  await worker.evaluate(async () => {
+    const result = await chrome.storage.local.get('settings');
+    const settings = result['settings'];
+    if (settings && typeof settings === 'object') {
+      const next = { ...(settings as Record<string, unknown>) };
+      delete next['toolbarPosition'];
+      await chrome.storage.local.set({ settings: next });
+    }
+  });
+}
+
 async function openFixturePage() {
+  await resetToolbarPosition();
   const page = await context.newPage();
   await page.goto(`${server.baseUrl}/basic.html`);
   await waitForExtensionInjected(page);
-  // Clear any persisted position for clean test state
+  // Legacy cleanup: current code no longer writes page storage, but old profiles may have it.
   await page.evaluate(() => localStorage.removeItem('pigeondeck.pos'));
   await page.reload();
   await waitForExtensionInjected(page);
@@ -242,7 +257,9 @@ test('⑤ long-press drag moves position, persists after refresh', async () => {
   const movedY = Math.abs((newRect!.y + newRect!.height / 2) - cy) > 20;
   expect(movedX || movedY).toBe(true);
 
-  // Reload — position should be restored from localStorage
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('pigeondeck.pos'))).toBeNull();
+
+  // Reload — position should be restored from extension settings, not page localStorage.
   await page.reload();
   await waitForExtensionInjected(page);
   await page.waitForTimeout(300);

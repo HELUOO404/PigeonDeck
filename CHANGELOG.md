@@ -11,6 +11,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 > **当前阶段：编码进行中。** V1 首个版本号将在功能闭环完成后确定。
 
+### Feature — 快捷键全量重绑 + 教程页按键指南 + 设置面板收紧（2026-07-12，分支 原欢迎页完善）
+
+用户反馈：教程页缺键盘说明、快捷键只有三项可改且藏在「交互」里、帮助无外链、设置面板留白多。基线：build ✓ / typecheck ✓ / vitest 473 ✓ / 全量 E2E 113 passed ✓ / i18n ✓。
+
+- **快捷键提炼为单一数据源 registry**：新增 `src/state/shortcuts-def.ts`（`SHORTCUT_DEFS` 定义 undo/redo/exit/save/delete/moveFree 六项——id/默认绑定/分类/i18n key/种类/护栏，纯函数 `buildDefaultShortcuts`/`comboHasModifier`/`findShortcutConflict`）。此前散落在 `selection-box.ts`(Delete)/`direct-edit.ts`·`panel.ts`·`region-select.ts`·`copy-text.ts`(Ctrl+Enter)/`move.ts`(Alt) 的硬编码键，改为统一读 `settings.shortcuts[id]` + `matchCombo`/`eventHasModifier`。`Settings.shortcuts` 由固定三字段扩为 `Record<ShortcutId,string>`，`loadSettings` 以 registry 默认打底，旧存 `{undo,redo,exit}` 自动补全新 id（无需迁移代码）。
+- **全量可重绑**：撤销/重做/退出/保存/删除元素为可录制组合键（`save` 带 `requireModifier` 护栏，拒绝裸 Enter 以免吞掉文本框换行）；自由移动（Alt）为修饰键选择器（Alt/Ctrl/Shift/⌘）。冲突检测改 registry 驱动。**取舍**：Esc 的浮层/面板逐层关闭（esc-stack）保持硬绑不参与重绑，仅「退出模式」层随 `exit` 绑定走。
+- **新增「快捷键」设置分区**（位于「帮助」上方，第 5 个导航项）：按分类分组收录全部快捷键，逐条可重绑 + 恢复默认；同步从「交互」分区移除快捷键子区（去重）。
+- **帮助分区**：新增「GitHub 主页」按钮（打开仓库首页）；「提交反馈」由占位 toast 改为**直接跳转 GitHub issues**。
+- **设置面板收紧**：左侧导航列 `align-self:flex-start` 不再拉伸，按钮下方不留白；共享内容区固定高度 300→280px，整面板更矮（保留切分区等高不跳）。
+- **教程页按键指南**：`public/onboarding.html` 在「What you can do」后新增「Keyboard」区（Global/Editing/Selection/Move 四组键帽 + 描述，末尾提示可在 设置 → 快捷键 重绑），复用现有设计令牌不改视觉/语言风格，全部经 `data-i18n` 本地化（en/zh_CN 各新增 25 键）。
+
 ### Refactor — Codex 架构重构（2026-07-08，分支 arch-refactor-codex）
 
 - **拆巨型模块（`76b153d`…`6bb7798`）**：从 `capture.ts`/`fields.ts`/`panel.ts` 抽出可单测的纯函数/工具子模块并补行为保护测试（行为等价，门禁全绿）——`capture-range.ts`（截图范围）/`capture-client.ts`（截图请求）/`capture-overlay-layout.ts`·`capture-card-layout.ts`（叠加与卡片布局）；`field-labels.ts`/`field-values.ts`/`field-layout.ts`；`floating-drag.ts`（`makeDraggableByHandle`）/`theme.ts`/`change-apply.ts`（`applyChangesTo`）/`annotation-summary.ts`。

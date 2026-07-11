@@ -44,6 +44,7 @@ import { Toast } from './toast';
 import { applyChangesTo } from './change-apply';
 import { summarizeAnnotationRows } from './annotation-summary';
 import { makeDraggableByHandle } from './floating-drag';
+import { matchCombo } from './shortcuts';
 
 /* ---- SVG 图标（Lucide 风格，与 preview parts 07/11/26/35 一致） ---- */
 const ICONS = {
@@ -281,6 +282,7 @@ export class PanelManager {
       store,
       history,
       overlayLayer,
+      settings,
       onAfterResize: (el) => this.onSelboxResize(el),
     });
 
@@ -584,9 +586,9 @@ export class PanelManager {
     textarea.setAttribute('data-testid', 'pd-panel-note');
     textarea.placeholder = t('panel_note_placeholder');
     textarea.value = existing?.note ?? '';
-    // Ctrl/Cmd+Enter 保存（普通 Enter 仍换行）（建议1）
+    // 保存快捷键（默认 Ctrl/Cmd+Enter）保存（普通 Enter 仍换行）（建议1）
     textarea.addEventListener('keydown', (ev) => {
-      if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+      if (matchCombo(ev, this.settings.shortcuts.save)) {
         ev.preventDefault();
         this.savePanel();
       }

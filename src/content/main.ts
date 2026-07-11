@@ -118,7 +118,7 @@ function inject(settings: Settings): void {
   // onDragStart（INVARIANT 3）：拖动工具盘/悬浮球时关闭「工具盘派生」的面板/浮层——
   // 设置面板（退设置模式）、复制文本/复制图片结果弹窗、清空确认（经 closeAllPopovers）+ 全部浮层；
   // 内容面板（批注面板/卡片、移动选中、区域面板）不动。
-  const toolbar = new Toolbar(controller, controlLayer, history, () => {
+  const toolbar = new Toolbar(controller, controlLayer, history, settings, () => {
     closeAllPopovers();
     copyTextManager?.close();
     copyImageManager?.close();

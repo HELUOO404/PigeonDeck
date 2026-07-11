@@ -588,9 +588,9 @@ export class RichTextBar {
         root: this.panelLayer,
         anchor: alignBtn,
         items: [
-          { value: 'left', label: 'Left' },
-          { value: 'center', label: 'Center' },
-          { value: 'right', label: 'Right' },
+          { value: 'left', label: t('opt_align_left') },
+          { value: 'center', label: t('opt_align_center') },
+          { value: 'right', label: t('opt_align_right') },
         ],
         current: normalizeAlign(this.getComputedProp('textAlign')),
         onPick: (v) => {

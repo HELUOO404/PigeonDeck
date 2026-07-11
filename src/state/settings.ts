@@ -3,6 +3,8 @@
    本阶段仅 hoverLabel / cardDefaultExpanded 两项，结构留好扩展。
    ============================================================ */
 
+import { ShortcutId, buildDefaultShortcuts } from './shortcuts-def';
+
 export interface Settings {
   /** 元素 hover 标签（默认开启） */
   hoverLabel: boolean;
@@ -60,8 +62,14 @@ export interface Settings {
    * 键盘快捷键绑定（建议6：全量重绑，仅展开态生效）。
    * combo 串格式见 shortcuts.formatCombo：修饰键固定序 Mod/Shift/Alt + 主键。
    * `Mod` 为跨平台主修饰符 = Ctrl（Win/Linux）或 Cmd（Mac），故一份绑定两端通用。
+   * 定义来自 shortcuts-def.SHORTCUT_DEFS（唯一真相源）：undo/redo/exit/save/delete/moveFree。
    */
-  shortcuts: { undo: string; redo: string; exit: string };
+  shortcuts: Record<ShortcutId, string>;
+  /**
+   * 工具盘位置。存扩展自己的 chrome.storage.local，不写入被访问页面的 localStorage。
+   * null = 默认右下角。
+   */
+  toolbarPosition: { right: number; bottom: number } | null;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -76,7 +84,8 @@ export const DEFAULT_SETTINGS: Settings = {
   longPressMs: 300,
   dragThreshold: 0,
   showModbar: true,
-  shortcuts: { undo: 'Mod+Z', redo: 'Mod+Shift+Z', exit: 'Escape' },
+  shortcuts: buildDefaultShortcuts(),
+  toolbarPosition: null,
 };
 
 /** 数值设置项夹紧到 [min, max]；非数字回退 fallback（设置面板 pd-num 用） */
@@ -95,14 +104,15 @@ export async function loadSettings(): Promise<Settings> {
     if (stored && typeof stored === 'object') {
       const merged = { ...DEFAULT_SETTINGS, ...(stored as Partial<Settings>) };
       // shortcuts 为嵌套对象：浅合并会整体替换，旧存储的残缺对象可能丢键；
-      // 这里用默认填补缺失键，并始终新建对象（避免与 DEFAULT_SETTINGS.shortcuts 共享引用被面板改写）。
-      merged.shortcuts = { ...DEFAULT_SETTINGS.shortcuts, ...merged.shortcuts };
+      // 以 registry 默认为底填补缺失键（旧存 {undo,redo,exit} → 自动补 save/delete/moveFree），
+      // 并始终新建对象（避免与默认共享引用被面板改写）。
+      merged.shortcuts = { ...buildDefaultShortcuts(), ...merged.shortcuts };
       return merged;
     }
   } catch {
     // storage 不可用时静默使用默认值
   }
-  return { ...DEFAULT_SETTINGS, shortcuts: { ...DEFAULT_SETTINGS.shortcuts } };
+  return { ...DEFAULT_SETTINGS, shortcuts: buildDefaultShortcuts() };
 }
 
 /** 局部更新设置并持久化 */

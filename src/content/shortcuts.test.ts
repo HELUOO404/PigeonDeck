@@ -5,11 +5,16 @@
    ============================================================ */
 
 import { describe, it, expect } from 'vitest';
-import { formatCombo, matchCombo } from './shortcuts';
+import { formatCombo, matchCombo, eventHasModifier } from './shortcuts';
 
 /** 构造一个 keydown KeyboardEvent */
 function ke(init: KeyboardEventInit): KeyboardEvent {
   return new KeyboardEvent('keydown', init);
+}
+
+/** 构造一个 MouseEvent（modifier 类快捷键从拖拽鼠标事件读修饰键） */
+function me(init: MouseEventInit): MouseEvent {
+  return new MouseEvent('mousemove', init);
 }
 
 describe('formatCombo', () => {
@@ -65,5 +70,32 @@ describe('matchCombo', () => {
   it('空 combo 永不匹配', () => {
     expect(matchCombo(ke({ key: 'z', ctrlKey: true }), '')).toBe(false);
     expect(matchCombo(ke({ key: 'Control', ctrlKey: true }), 'Mod+Z')).toBe(false);
+  });
+
+  it('匹配 Delete / Mod+Enter（重构后消费端用）', () => {
+    expect(matchCombo(ke({ key: 'Delete' }), 'Delete')).toBe(true);
+    expect(matchCombo(ke({ key: 'Backspace' }), 'Delete')).toBe(false);
+    expect(matchCombo(ke({ key: 'Enter', ctrlKey: true }), 'Mod+Enter')).toBe(true);
+    expect(matchCombo(ke({ key: 'Enter', metaKey: true }), 'Mod+Enter')).toBe(true);
+    expect(matchCombo(ke({ key: 'Enter' }), 'Mod+Enter')).toBe(false);
+  });
+});
+
+describe('eventHasModifier', () => {
+  it('KeyboardEvent / MouseEvent 均识别按住的修饰键', () => {
+    expect(eventHasModifier(me({ altKey: true }), 'Alt')).toBe(true);
+    expect(eventHasModifier(me({ altKey: false }), 'Alt')).toBe(false);
+    expect(eventHasModifier(ke({ key: 'a', shiftKey: true }), 'Shift')).toBe(true);
+    expect(eventHasModifier(me({ metaKey: true }), 'Meta')).toBe(true);
+  });
+
+  it('Mod = Ctrl 或 Cmd', () => {
+    expect(eventHasModifier(me({ ctrlKey: true }), 'Mod')).toBe(true);
+    expect(eventHasModifier(me({ metaKey: true }), 'Mod')).toBe(true);
+    expect(eventHasModifier(me({}), 'Mod')).toBe(false);
+  });
+
+  it('未知 token → false', () => {
+    expect(eventHasModifier(me({ altKey: true }), 'Nope')).toBe(false);
   });
 });

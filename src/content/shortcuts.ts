@@ -45,6 +45,26 @@ export function matchCombo(e: KeyboardEvent, combo: string): boolean {
   return formatCombo(e).toLowerCase() === combo.toLowerCase();
 }
 
+/**
+ * 事件是否按下了指定修饰 token（modifier 类快捷键用，如 Alt 自由移动）。
+ * 同时支持 KeyboardEvent / MouseEvent（move.ts 从拖拽鼠标事件实时读）。
+ * `Mod` = Ctrl(Win/Linux) 或 Cmd(Mac)，与 formatCombo 归一规则一致。
+ */
+export function eventHasModifier(e: KeyboardEvent | MouseEvent, token: string): boolean {
+  switch (token) {
+    case 'Alt':
+      return e.altKey;
+    case 'Shift':
+      return e.shiftKey;
+    case 'Meta':
+      return e.metaKey;
+    case 'Mod':
+      return e.ctrlKey || e.metaKey;
+    default:
+      return false;
+  }
+}
+
 /** 注册快捷键监听器，返回卸载函数。keymap 实时读 settings.shortcuts（共享引用）。 */
 export function setupShortcuts(
   controller: Controller,

@@ -58,6 +58,19 @@ export async function launchExtensionBrowser(): Promise<{
     }
   }
 
+  const worker = context.serviceWorkers().find((w) => w.url().includes(`chrome-extension://${extensionId}/`));
+  if (worker) {
+    await worker.evaluate(async () => {
+      const result = await chrome.storage.local.get('settings');
+      const settings = result['settings'];
+      if (settings && typeof settings === 'object') {
+        const next = { ...(settings as Record<string, unknown>) };
+        delete next['toolbarPosition'];
+        await chrome.storage.local.set({ settings: next });
+      }
+    });
+  }
+
   return { context, extensionId };
 }
 

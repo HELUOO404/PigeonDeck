@@ -13,6 +13,7 @@ import { makeDraggableByHandle } from './floating-drag';
 import { closeAllPopovers } from './popover';
 import { buildSelector, isVisible, findScrollableAncestor } from '../shared/dom-utils';
 import { pushEsc } from './esc-stack';
+import { matchCombo } from './shortcuts';
 import { t } from './i18n';
 
 /** 长按阈值默认值（ms）；实际用 settings.longPressMs（阶段 11 接入） */
@@ -366,9 +367,9 @@ export class RegionSelectManager {
     textarea.placeholder = t('region_note_placeholder');
     textarea.rows = 1;
     textarea.value = existing?.note ?? '';
-    // Ctrl/Cmd+Enter 保存（普通 Enter 仍换行）（F16，镜像普通面板）
+    // 保存快捷键（默认 Ctrl/Cmd+Enter）保存（普通 Enter 仍换行）（F16，镜像普通面板）
     textarea.addEventListener('keydown', (ev) => {
-      if ((ev.ctrlKey || ev.metaKey) && ev.key === 'Enter') {
+      if (matchCombo(ev, this.settings.shortcuts.save)) {
         ev.preventDefault();
         this.saveRegionPanel(textarea.value, viewportPos, region, existing);
       }
