@@ -31,6 +31,8 @@ function makeToast(): Toast {
 interface Ctx {
   manager: PanelManager;
   panelLayer: HTMLElement;
+  store: AnnotationStore;
+  toast: Toast;
   /** 页面元素 A（无 id 重复问题） */
   target: HTMLElement;
   /** 页面元素 B（用于"点不同目标"测试） */
@@ -76,19 +78,21 @@ function setupCtx(): Ctx {
   const controller = new Controller();
   controller.expand(); // expanded + annotate → this.active = true
 
+  const store = new AnnotationStore();
+  const toast = makeToast();
   const manager = new PanelManager(
     controller,
-    new AnnotationStore(),
+    store,
     makeOverlay(),
     panelLayer,
     { ...DEFAULT_SETTINGS },
     new History(),
-    makeToast(),
+    toast,
     overlayLayer,
     feedbackLayer,
   );
 
-  return { manager, panelLayer, target, otherTarget };
+  return { manager, panelLayer, store, toast, target, otherTarget };
 }
 
 /** 派发能被 window capture 捕获的鼠标事件（composed=true 穿越 shadow boundary） */
@@ -152,6 +156,33 @@ describe('Delete in annotate mode', () => {
     );
 
     expect(target.isConnected).toBe(true);
+    manager.destroy();
+  });
+});
+
+describe('saving after media replacement', () => {
+  it('uses the replacement record created after the panel opened', () => {
+    const { manager, panelLayer, store, toast, target } = setupCtx();
+    manager.openPanel(target, null);
+    store.add({
+      selector: '#pd-test-target',
+      elementType: 'image',
+      summary: 'image',
+      note: '',
+      changes: [{
+        prop: 'replaceMedia',
+        cssProp: 'src',
+        oldValue: 'old.png',
+        newValue: 'new.png',
+      }],
+      viewportPos: { x: 100, y: 50, w: 100, h: 50 },
+    });
+
+    panelLayer.querySelector<HTMLButtonElement>('[data-testid="pd-panel-save"]')!.click();
+
+    expect(toast.show).not.toHaveBeenCalled();
+    expect(panelLayer.querySelector('[data-testid="pd-panel"]')).toBeNull();
+    expect(store.getAll()[0].changes).toHaveLength(1);
     manager.destroy();
   });
 });

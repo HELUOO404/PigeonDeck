@@ -8,7 +8,7 @@
    （原逻辑从 move.ts 抽出，逐值保持一致以不回归移动模式行为。）
    ============================================================ */
 
-import { AnnotationStore, StyleChange, mergeChanges } from '../state/annotations';
+import { Annotation, AnnotationStore, StyleChange, mergeChanges } from '../state/annotations';
 import { History } from '../state/history';
 import { Settings } from '../state/settings';
 import { buildSelector } from '../shared/dom-utils';
@@ -189,15 +189,39 @@ export class SelectionBox {
     const parent = el.parentNode;
     if (!parent) return;
     const nextSibling = el.nextSibling;
-    const annotation = this.store.getBySelector(buildSelector(el));
+    const selector = buildSelector(el);
+    const annotation = this.store.getBySelector(selector);
+    const rect = el.getBoundingClientRect();
+    let deletedRecord: Annotation | undefined = annotation
+      ? { ...annotation, deleted: true }
+      : undefined;
 
     const remove = (): void => {
       el.remove();
       if (annotation) this.store.remove(annotation.id);
+      if (deletedRecord) {
+        this.store.restore(deletedRecord);
+      } else {
+        deletedRecord = this.store.add({
+          selector,
+          elementType: 'container',
+          summary: el.tagName.toLowerCase(),
+          note: '',
+          changes: [],
+          viewportPos: {
+            x: Math.round(rect.x),
+            y: Math.round(rect.y),
+            w: Math.round(rect.width),
+            h: Math.round(rect.height),
+          },
+          deleted: true,
+        });
+      }
     };
     const restore = (): void => {
       if (nextSibling?.parentNode === parent) parent.insertBefore(el, nextSibling);
       else parent.appendChild(el);
+      if (deletedRecord) this.store.remove(deletedRecord.id);
       if (annotation) this.store.restore(annotation);
     };
 

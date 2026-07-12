@@ -53,12 +53,22 @@ describe('SelectionBox Delete', () => {
   });
 
   it('deletes the selected element and clears the selection box', () => {
-    const { box, target } = setup();
+    const { box, history, store, target } = setup();
 
     press('Delete');
 
     expect(target.isConnected).toBe(false);
     expect(document.querySelector('[data-testid="pd-selbox"]')).toBeNull();
+    expect(store.getAll()).toHaveLength(1);
+    expect(store.getAll()[0]).toMatchObject({ selector: '#delete-target', deleted: true });
+
+    expect(history.undo()).toBe(true);
+    expect(target.isConnected).toBe(true);
+    expect(store.getAll()).toHaveLength(0);
+
+    expect(history.redo()).toBe(true);
+    expect(target.isConnected).toBe(false);
+    expect(store.getAll()[0]).toMatchObject({ selector: '#delete-target', deleted: true });
     box.destroy();
   });
 
@@ -75,14 +85,14 @@ describe('SelectionBox Delete', () => {
 
     press('Delete');
 
-    expect(store.getById(annotation.id)).toBeUndefined();
+    expect(store.getById(annotation.id)).toMatchObject({ deleted: true });
     expect(history.undo()).toBe(true);
     expect([...document.body.children].slice(0, 3)).toEqual([before, target, after]);
     expect(store.getById(annotation.id)).toEqual(annotation);
 
     expect(history.redo()).toBe(true);
     expect(target.isConnected).toBe(false);
-    expect(store.getById(annotation.id)).toBeUndefined();
+    expect(store.getById(annotation.id)).toMatchObject({ deleted: true });
     box.destroy();
   });
 

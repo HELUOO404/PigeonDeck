@@ -911,10 +911,12 @@ export class PanelManager {
 
     // 本次会话的样式修改（同属性已合并），并入已有记录
     const sessionChanges = this.session?.getChanges() ?? [];
+    const currentExisting =
+      this.panelExisting ?? this.store.getBySelector(buildSelector(target));
 
     let saved: Annotation | undefined;
-    if (this.panelExisting) {
-      const before = this.panelExisting;
+    if (currentExisting) {
+      const before = currentExisting;
       const patch = {
         note,
         summary: getElementSummary(target),

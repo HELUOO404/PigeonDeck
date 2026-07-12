@@ -130,7 +130,14 @@ export function buildOperations(annotations: Annotation[]): Operation[] {
       if (a.move && existing.move) {
         move = { ...a.move, initialRect: existing.move.initialRect };
       }
-      bySel.set(a.selector, { ...existing, note, changes: merged, richText, move });
+      bySel.set(a.selector, {
+        ...existing,
+        note,
+        changes: merged,
+        richText,
+        move,
+        deleted: a.deleted || existing.deleted,
+      });
     } else {
       bySel.set(a.selector, a);
     }
@@ -142,6 +149,17 @@ export function buildOperations(annotations: Annotation[]): Operation[] {
   for (const a of bySel.values()) {
     const { cssChanges, contentChanges } = splitChanges(a.changes);
     const richText = a.richText ?? [];
+    if (a.deleted) {
+      ops.push({
+        number: a.number,
+        type: 'Delete',
+        target: a.selector,
+        cssChanges: [],
+        contentChanges: [],
+        richText: [],
+      });
+      continue;
+    }
     const hasAnnotation = a.note.trim().length > 0;
     const hasStyle = cssChanges.length > 0 || contentChanges.length > 0 || richText.length > 0;
     const hasMove = a.move != null;
@@ -246,6 +264,7 @@ interface Labels {
   typeStyle: string;
   typeMove: string;
   typeRegion: string;
+  typeDelete: string;
   /** 富文本子块标题 + 逐动作动词/短语（F21） */
   richText: string;
   rtSetFont: string;
@@ -299,6 +318,7 @@ const LABELS: Record<'en' | 'zh_CN', Labels> = {
     typeStyle: 'Style Modification',
     typeMove: 'Move',
     typeRegion: 'Region',
+    typeDelete: 'Delete',
     richText: 'Rich text',
     rtSetFont: 'set font',
     rtSetFontSize: 'set font-size',
@@ -356,6 +376,7 @@ const LABELS: Record<'en' | 'zh_CN', Labels> = {
     typeStyle: '样式修改',
     typeMove: '移动',
     typeRegion: '区域',
+    typeDelete: '删除',
     richText: '富文本',
     rtSetFont: '设置字体',
     rtSetFontSize: '设置字号',
@@ -537,6 +558,7 @@ function localizeType(type: string, L: Labels): string {
     'Style Modification': L.typeStyle,
     Move: L.typeMove,
     Region: L.typeRegion,
+    Delete: L.typeDelete,
   };
   return type
     .split(' + ')

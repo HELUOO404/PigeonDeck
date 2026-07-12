@@ -132,6 +132,17 @@ describe('buildOperations — type construction', () => {
   });
 });
 
+describe('deleted element operations', () => {
+  it('renders deleted elements in English and Chinese task lists', () => {
+    const ops = buildOperations([ann({ deleted: true })]);
+
+    expect(ops).toHaveLength(1);
+    expect(ops[0].type).toBe('Delete');
+    expect(renderTaskList(ops, CTX, 'en')).toContain('--- #1 Delete ---');
+    expect(renderTaskList(ops, CTX, 'zh_CN')).toContain('--- #1 删除 ---');
+  });
+});
+
 // ============================================================
 // buildOperations — same-element merge (§6.4)
 // ============================================================
