@@ -179,3 +179,42 @@ test('④ 清空后新造标注 → 编号重置为 #1', async () => {
 
   await page.close();
 });
+
+test('⑤ Delete 保留占位框，清空恢复节点，撤销清空重新删除', async () => {
+  const page = await openFixturePage();
+  await expandToolbar(page);
+  await clickPageEl(page, '#btn-primary');
+  await waitShadowVisible(page, '[data-testid="pd-panel"]');
+
+  await page.keyboard.press('Delete');
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const target = document.querySelector<HTMLElement>('#btn-primary');
+        return { connected: !!target?.isConnected, opacity: target?.style.opacity ?? '' };
+      })
+    )
+    .toEqual({ connected: true, opacity: '0' });
+  await waitShadowVisible(page, '[data-testid="pd-markbox"]');
+  await waitShadowVisible(page, '[data-testid="pd-pin"]');
+
+  await clickShadowEl(page, 'pd-btn-clear');
+  await waitShadowVisible(page, '[data-testid="pd-clear-confirm"]');
+  await clickShadowEl(page, 'pd-clear-ok');
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.querySelector<HTMLElement>('#btn-primary')?.style.opacity ?? '')
+    )
+    .toBe('');
+  await waitShadowGone(page, '[data-testid="pd-pin"]');
+
+  await page.keyboard.press('Control+z');
+  await expect
+    .poll(() =>
+      page.evaluate(() => document.querySelector<HTMLElement>('#btn-primary')?.style.opacity ?? '')
+    )
+    .toBe('0');
+  await waitShadowVisible(page, '[data-testid="pd-pin"]');
+
+  await page.close();
+});
