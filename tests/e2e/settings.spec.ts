@@ -224,6 +224,12 @@ test('④ 关 hover 标签 → 重开面板仍关', async () => {
 
   // 默认开启
   expect(await shadowSwitchOn(page, 'pd-set-hover')).toBe(true);
+  await page.evaluate(() => {
+    document
+      .querySelector('#pd-host')
+      ?.shadowRoot?.querySelector('[data-testid="pd-set-hover"]')
+      ?.scrollIntoView({ block: 'center' });
+  });
   await clickShadowEl(page, 'pd-set-hover');
   await expect.poll(() => shadowSwitchOn(page, 'pd-set-hover'), { timeout: 5000 }).toBe(false);
 
