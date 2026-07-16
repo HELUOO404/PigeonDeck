@@ -32,8 +32,8 @@ import {
   findShortcutConflict,
 } from '../state/shortcuts-def';
 
-/** 扩展版本号（about 区展示；manifest 为发布号，V1 展示固定 1.0.0） */
-const VERSION = '1.0.0';
+/** 扩展版本号（about 区展示；manifest 为发布号，V1 展示固定 1.0.1） */
+const VERSION = '1.0.1';
 
 const svg = (inner: string, sw = 1.6): string =>
   `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${inner}</svg>`;

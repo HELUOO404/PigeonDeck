@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-07-15
+
 ### Fixed
 
 - 修复删除标注在图片导出中缺少标注框和删除卡片，以及清空后无法恢复被删除内容的问题。
@@ -374,5 +376,6 @@ PigeonDeck 首个正式发布版本，标志 V1 功能闭环。以下为自 v0.1
 
 ---
 
-[Unreleased]: https://github.com/Pigeon-Pub/PigeonDeck/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Pigeon-Pub/PigeonDeck/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/Pigeon-Pub/PigeonDeck/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/Pigeon-Pub/PigeonDeck/compare/v0.1.0...v1.0.0

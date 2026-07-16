@@ -274,6 +274,8 @@ test('删除布局默认保留位置，可切换并持久化', async () => {
   await clickShadowEl(page, 'pd-set-nav-interaction');
   await waitShadowVisible(page, '[data-testid="pd-set-delete-preserve"]');
 
+  expect(await shadowText(page, 'pd-set-delete-preserve')).toBe('保留');
+  expect(await shadowText(page, 'pd-set-delete-reflow')).toBe('重排');
   expect(await shadowSwitchOn(page, 'pd-set-delete-preserve')).toBe(true);
   await clickShadowEl(page, 'pd-set-delete-reflow');
   await expect.poll(() => storedDeletionLayout(), { timeout: 5000 }).toBe('reflow');
