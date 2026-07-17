@@ -51,3 +51,19 @@ npm run i18n:check
 - `tests/`：Playwright E2E 与本地夹具。
 - `scripts/`：资源生成和仓库检查脚本。
 - `assets/`：README、商店和宣传使用的源素材及生成素材。
+
+## 站点部署（宣传站 `site/`）
+
+`site/` 是独立的纯静态宣传站，托管在 **Cloudflare Pages**（项目名 `pigeondeck`）。
+线上地址：**https://deck.pigeon.pub** （备用直连 https://pigeondeck.pages.dev ）。
+
+改完 `site/` 内容后，用 wrangler 一条命令重新发布（Windows PowerShell）：
+
+```powershell
+$env:CLOUDFLARE_API_TOKEN  = '<带 Cloudflare Pages:Edit 权限的 token，见 .secrets/>'
+$env:CLOUDFLARE_ACCOUNT_ID = '4000221f6c135fb1ab5517d47552e45d'
+npx wrangler pages deploy site --project-name pigeondeck --branch main --commit-dirty=true
+```
+
+- 域名 `pigeon.pub` 的 DNS 已整域托管在 Cloudflare；`deck` 是指向 Pages 的橙云 CNAME。
+- 凭证只放本机 `.secrets/deploy-credentials.md`（已被 `.gitignore` 忽略）；**任何凭证与 `.secrets/` 都不得提交**。

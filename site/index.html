@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PigeonDeck — 标注网页，交给你的 AI</title>
+<meta name="description" content="PigeonDeck 是一款 Chrome / Edge 浏览器扩展：在任意网页上标注、就地编辑、移动组件，一键复制成 AI 可执行的任务清单或带批注的长截图。">
+<link rel="icon" href="assets/logo-mark.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400&display=swap" rel="stylesheet">
+<style>
+  /* ---- 品牌令牌：看齐教程页(onboarding) 调色 ---- */
+  :root{
+    --gold:#b8842c;
+    --gold-deep:#9a6f21;
+    --eyebrow:#8a6115;                 /* 小号金字达 AA 4.5:1 */
+    --gold-soft:rgba(184,132,44,.10);
+    --gold-edge:rgba(184,132,44,.32);
+    --ink:#23262e;
+    --ink2:#63636a;
+    --bg:#f7f4ec;
+    --bg2:#fbf9f3;
+    --card:#ffffff;
+    --edge:#e7e1d3;
+    --sh:0 1px 2px rgba(30,24,12,.06);
+    --sh-up:0 24px 60px -28px rgba(60,44,16,.42),0 4px 14px -8px rgba(60,44,16,.16);
+    --serif:'Fraunces','Noto Serif SC',Georgia,serif;
+    --sans:system-ui,-apple-system,'Segoe UI',Roboto,'PingFang SC','Microsoft YaHei',sans-serif;
+    --maxw:1080px;
+  }
+  html[data-theme="dark"]{
+    --gold:#d0a24a;
+    --gold-deep:#e0b866;
+    --eyebrow:#d9ad55;
+    --gold-soft:rgba(208,162,74,.12);
+    --gold-edge:rgba(208,162,74,.34);
+    --ink:#efeada;
+    --ink2:#a09c92;
+    --bg:#141519;
+    --bg2:#191b20;
+    --card:#1e2026;
+    --edge:rgba(239,234,218,.14);
+    --sh-up:0 24px 60px -28px rgba(0,0,0,.7),0 4px 14px -8px rgba(0,0,0,.4);
+  }
+
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    font-family:var(--sans);color:var(--ink);line-height:1.65;
+    background:radial-gradient(1200px 560px at 78% -10%,var(--gold-soft),transparent 60%),var(--bg);
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+    transition:background .4s,color .4s;overflow-x:hidden;
+  }
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%;display:block}
+  :focus-visible{outline:2px solid var(--eyebrow);outline-offset:3px;border-radius:8px}
+  :focus:not(:focus-visible){outline:none}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 28px}
+  .mark{color:var(--gold);display:block}
+  .mark svg{width:100%;height:100%;display:block}
+
+  /* eyebrow 药丸 */
+  .eyebrow{
+    display:inline-flex;align-items:center;gap:8px;
+    font-family:var(--serif);font-weight:500;font-size:12px;
+    letter-spacing:.24em;text-transform:uppercase;color:var(--eyebrow);
+    background:var(--gold-soft);border:1px solid var(--gold-edge);
+    padding:7px 15px;border-radius:999px;
+  }
+  .eyebrow svg{width:14px;height:14px}
+
+  /* 按钮 */
+  .btn{
+    display:inline-flex;align-items:center;gap:9px;font-family:var(--sans);
+    font-weight:600;font-size:14.5px;padding:12px 24px;border-radius:999px;
+    cursor:pointer;border:1px solid transparent;transition:transform .16s,background .2s,border-color .2s,color .2s;white-space:nowrap;
+  }
+  .btn svg{width:17px;height:17px}
+  .btn-gold{background:var(--gold);color:#fff;box-shadow:0 10px 24px -12px rgba(184,132,44,.7)}
+  .btn-gold:hover{transform:translateY(-2px)}
+  .btn-ghost{border-color:var(--edge);background:var(--card);color:var(--ink)}
+  .btn-ghost:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .btn-soon{border-color:var(--edge);background:transparent;color:var(--ink2);cursor:not-allowed}
+  .btn-soon .tag{font-family:var(--serif);font-size:10px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--eyebrow);border:1px solid var(--gold-edge);border-radius:999px;padding:1px 7px}
+
+  /* 框图 */
+  .frame{border:1px solid var(--edge);background:var(--card);border-radius:16px;
+    box-shadow:var(--sh-up);overflow:hidden;line-height:0}
+  .frame img{width:100%;height:auto}
+
+  /* ---- 顶栏 ---- */
+  header.top{position:sticky;top:0;z-index:50;
+    background:color-mix(in srgb,var(--bg) 84%,transparent);
+    backdrop-filter:saturate(1.3) blur(14px);border-bottom:1px solid var(--edge)}
+  .nav{display:flex;align-items:center;gap:20px;height:64px}
+  .brand{display:flex;align-items:center;gap:10px;font-family:var(--serif)}
+  .brand .mark{width:28px;height:28px}
+  .brand .name{font-size:20px;font-weight:400;letter-spacing:-.02em;color:var(--ink)}
+  .brand .name b{font-weight:600}
+  .nav .sp{flex:1}
+  .icon-btn{width:38px;height:38px;border:1px solid var(--edge);border-radius:10px;background:var(--card);
+    color:var(--ink);display:grid;place-items:center;cursor:pointer;font-size:13px;font-weight:600;transition:.2s}
+  .icon-btn:hover{border-color:var(--gold);color:var(--gold-deep)}
+  .icon-btn svg{width:17px;height:17px}
+
+  /* ---- Hero（居中）---- */
+  .hero{text-align:center;padding:96px 24px 20px;max-width:900px;margin:0 auto}
+  .lockup{display:flex;align-items:center;justify-content:center;gap:22px;margin:8px 0 0}
+  .lockup .mark{width:82px;height:82px;flex:none;filter:drop-shadow(0 10px 18px rgba(184,132,44,.22))}
+  .lockup .name{font-family:var(--serif);font-weight:400;font-size:70px;line-height:1;letter-spacing:-.025em;color:var(--ink)}
+  .lockup .name b{font-weight:600}
+  .hero .lede{font-family:var(--serif);font-weight:400;font-size:clamp(26px,4.2vw,40px);
+    line-height:1.14;letter-spacing:-.02em;color:var(--ink);margin:34px auto 0;max-width:14em}
+  .hero .lede b{font-weight:600;color:var(--gold-deep)}
+  .hero .sub{font-size:15.5px;color:var(--ink2);margin:20px auto 0;max-width:34em}
+  .hero-cta{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin-top:32px}
+  .hero-shot{max-width:920px;margin:64px auto 0}
+
+  /* 中轴引线 */
+  .axis-lead{width:2px;height:64px;margin:8px auto 0;
+    background:linear-gradient(180deg,transparent,var(--gold-edge))}
+
+  /* 分节标题（居中）*/
+  .sec-head{text-align:center;max-width:640px;margin:0 auto 30px}
+  .sec-head h2{font-family:var(--serif);font-weight:600;font-size:clamp(26px,3.2vw,34px);
+    letter-spacing:-.015em;color:var(--ink);margin-top:14px}
+  .sec-head p{color:var(--ink2);font-size:15.5px;margin-top:12px}
+  section.blk{padding:16px 0 40px}
+
+  /* ---- 中轴时间线 ---- */
+  .axis{position:relative;max-width:960px;margin:0 auto;padding:8px 0 4px}
+  .axis::before{content:"";position:absolute;left:50%;top:0;bottom:0;width:2px;transform:translateX(-50%);
+    background:linear-gradient(180deg,transparent,var(--gold-edge) 6%,var(--gold-edge) 94%,transparent)}
+  .node{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:76px;align-items:center;padding:30px 0}
+  .num{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:2;
+    width:46px;height:46px;border-radius:50%;background:var(--gold);color:#fff;
+    display:grid;place-items:center;font-family:var(--serif);font-weight:600;font-size:18px;
+    box-shadow:0 0 0 7px var(--bg),0 8px 20px -8px var(--gold)}
+  .node .copy .t{font-family:var(--serif);font-weight:600;font-size:23px;letter-spacing:-.01em;color:var(--ink)}
+  .node .copy .d{color:var(--ink2);font-size:15px;margin-top:9px;line-height:1.7;max-width:20em}
+  /* 奇数：图左·字右（贴轴左对齐）*/
+  .node:nth-child(even) .media{order:2}
+  .node:nth-child(even) .copy{order:1;text-align:right}
+  .node:nth-child(even) .copy .d{margin-left:auto}
+
+  /* ---- 收尾 CTA ---- */
+  .closing{max-width:960px;margin:20px auto 0;text-align:center;
+    background:linear-gradient(160deg,var(--gold-soft),transparent),var(--bg2);
+    border:1px solid var(--gold-edge);border-radius:24px;padding:64px 40px}
+  .closing .mark{width:48px;height:48px;margin:0 auto 22px}
+  .closing .punch{font-family:var(--serif);font-weight:500;font-size:clamp(22px,3vw,30px);
+    line-height:1.28;letter-spacing:-.015em;color:var(--ink);max-width:16em;margin:0 auto}
+  .closing .hero-cta{margin-top:30px}
+  .closing .trust{margin-top:26px;font-size:13px;color:var(--ink2);letter-spacing:.02em}
+
+  /* ---- 页脚（居中）---- */
+  footer{max-width:var(--maxw);margin:64px auto 0;padding:30px 28px 56px;border-top:1px solid var(--edge);
+    display:flex;flex-direction:column;align-items:center;gap:16px;text-align:center}
+  .foot-brand{display:flex;align-items:center;gap:9px;font-family:var(--serif)}
+  .foot-brand .mark{width:24px;height:24px}
+  .foot-brand .name{font-size:17px;color:var(--ink)}
+  .foot-brand .name b{font-weight:600}
+  .foot-links{display:flex;flex-wrap:wrap;gap:12px 24px;justify-content:center}
+  .foot-links a,.foot-links .soon{font-size:14px;color:var(--ink2);display:inline-flex;align-items:center;gap:7px;transition:color .2s}
+  .foot-links a:hover{color:var(--gold-deep)}
+  .foot-links .soon{cursor:not-allowed}
+  .foot-links .soon .tag{font-family:var(--serif);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--eyebrow);border:1px solid var(--gold-edge);border-radius:999px;padding:0 6px}
+  .foot-meta{font-size:12.5px;color:var(--ink2)}
+  .foot-meta .dot{color:var(--gold-deep);margin:0 8px}
+
+  /* 滚动出现 */
+  .reveal{opacity:0;transform:translateY(22px);transition:opacity .7s cubic-bezier(.22,.61,.36,1),transform .7s cubic-bezier(.22,.61,.36,1)}
+  .reveal.in{opacity:1;transform:none}
+  @media (prefers-reduced-motion:reduce){.reveal{opacity:1;transform:none;transition:none}html{scroll-behavior:auto}}
+
+  /* 响应式 */
+  @media (max-width:860px){
+    .hero{padding-top:60px}
+    .lockup .name{font-size:46px}.lockup .mark{width:54px;height:54px}
+    .axis::before{left:22px}
+    .node{grid-template-columns:1fr;gap:18px;padding-left:58px}
+    .node .media,.node:nth-child(even) .media{order:0}
+    .node .copy,.node:nth-child(even) .copy{order:0;text-align:left}
+    .node:nth-child(even) .copy .d{margin-left:0}
+    .num{left:22px;top:30px;transform:translate(-50%,0);width:40px;height:40px;font-size:16px}
+  }
+  @media (max-width:520px){.wrap{padding:0 18px}.closing{padding:48px 24px}}
+</style>
+</head>
+<body>
+
+<template id="dove">
+  <svg viewBox="0 0 630.367 618.433" fill="none" stroke="currentColor" stroke-width="35" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M78 387.5C152.631 368.891 76.4167 392.232 49.7159 390.136C29.1717 388.523 9.13425 371.072 2.55369 390.136C-12.5464 433.88 43.4887 557.5 61.4994 557.5C97.5603 557.5 95.1332 499.399 184.592 475.119C256.159 455.694 409.626 508.071 456.782 345.043C503.939 182.015 572.94 180.281 582.476 175.078C592.011 169.875 556.99 105.184 472.386 130.853C450.907 137.369 435.465 148.71 424.171 156.868C399.875 174.416 397.5 180 389 185.5C380.5 191 368.5 203 313.753 182.016C259.005 161.031 242.331 146.042 189.5 107C156.829 82.8558 176 96.4999 75.369 10.3161C-25.262 -75.8676 145.757 407.479 184.592 365.855C197.353 352.189 196.253 346.982 199.328 332.903C205.612 304.136 206.358 271.572 217.532 286.943C224.842 296.998 237.881 316.154 248.739 335.504C262.601 360.21 276.478 376.261 284.28 374.527C292.081 372.793 325.888 347.298 325.888 335.504C325.888 331.568 324.906 329.488 317.921 320.623C315.251 317.234 311.705 312.855 307 307C287.143 282.288 243.751 226.465 280 273" transform="matrix(0.996195,-0.0871557,0.0871557,0.996195,0,50.899)"/></svg>
+</template>
+
+<header class="top">
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="PigeonDeck"><span class="mark" data-dove></span><span class="name">Pigeon<b>Deck</b></span></a>
+    <span class="sp"></span>
+    <button class="icon-btn" id="langBtn" title="切换语言 / Language" aria-label="切换语言">EN</button>
+    <button class="icon-btn" id="themeBtn" title="深浅色 / Theme" aria-label="切换主题"></button>
+    <a class="btn btn-gold" href="https://github.com/Pigeon-Pub/PigeonDeck" target="_blank" rel="noopener">
+      <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.6.69.49A10.26 10.26 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+      GitHub
+    </a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="lockup reveal"><span class="mark" data-dove></span><span class="name">Pigeon<b>Deck</b></span></div>
+    <p class="lede reveal" data-zh="标注网页，<b>交给你的 AI</b>" data-en="Annotate the web,<br><b>hand it to your AI</b>">标注网页，<b>交给你的 AI</b></p>
+    <p class="sub reveal" data-zh="批注 · 编辑 · 移动 一键复制成 AI 任务清单" data-en="Annotate · edit · move · copy one AI-ready task list">批注 · 编辑 · 移动 一键复制成 AI 任务清单</p>
+    <div class="hero-cta reveal">
+      <button type="button" class="btn btn-soon" disabled title="即将上线">
+        <span data-zh="Edge 商店" data-en="Edge Add-ons">Edge 商店</span><span class="tag" data-zh="即将" data-en="Soon">即将</span>
+      </button>
+      <a class="btn btn-ghost" href="https://github.com/Pigeon-Pub/PigeonDeck#install" target="_blank" rel="noopener"><span data-zh="从源码运行" data-en="Run from source">从源码运行</span></a>
+    </div>
+    <div class="frame hero-shot reveal">
+      <img data-shot="03-pins-card" src="assets/screenshots/zh/03-pins-card.webp" alt="PigeonDeck 在真实网页上的编号批注与批注卡片" loading="eager">
+    </div>
+  </section>
+
+  <!-- 中轴时间线 -->
+  <section class="blk">
+    <div class="axis-lead reveal"></div>
+    <div class="sec-head reveal" style="margin-top:34px">
+      <span class="eyebrow" data-zh="核心能力" data-en="Core">核心能力</span>
+      <h2 data-zh="从标注到交付，一条线" data-en="From annotation to handoff">从标注到交付，一条线</h2>
+    </div>
+    <div class="axis">
+      <div class="node reveal">
+        <div class="media"><div class="frame"><img data-shot="02-annotate" src="assets/screenshots/zh/02-annotate.webp" alt=""></div></div>
+        <span class="num">1</span>
+        <div class="copy"><div class="t" data-zh="标注" data-en="Annotate">标注</div><p class="d" data-zh="单击任意元素进行批注；长按框选区域。" data-en="Single-click any element to annotate; long-press to box a region.">单击任意元素进行批注；长按框选区域。</p></div>
+      </div>
+      <div class="node reveal">
+        <div class="copy"><div class="t" data-zh="就地编辑" data-en="Edit in place">就地编辑</div><p class="d" data-zh="双击改文字与样式，配富文本浮条与多样式。" data-en="Double-click to rewrite text and styles, with a rich-text bar and advanced styles.">双击改文字与样式，配富文本浮条与多样式。</p></div>
+        <span class="num">2</span>
+        <div class="media"><div class="frame"><img data-shot="05-advanced-styles" src="assets/screenshots/zh/05-advanced-styles.webp" alt=""></div></div>
+      </div>
+      <div class="node reveal">
+        <div class="media"><div class="frame"><img data-shot="06-move-selbox" src="assets/screenshots/zh/06-move-selbox.webp" alt=""></div></div>
+        <span class="num">3</span>
+        <div class="copy"><div class="t" data-zh="移动吸附" data-en="Move & snap">移动吸附</div><p class="d" data-zh="拖动组件预览新位置，边缘/中心自动对齐。" data-en="Drag to preview a new position, with edge and center guides.">拖动组件预览新位置，边缘/中心自动对齐。</p></div>
+      </div>
+      <div class="node reveal">
+        <div class="copy"><div class="t" data-zh="复制为任务" data-en="Copy as task">复制为任务</div><p class="d" data-zh="一键生成 AI 可执行的修改清单。" data-en="One AI-ready edit list, in a click.">一键生成 AI 可执行的修改清单。</p></div>
+        <span class="num">4</span>
+        <div class="media"><div class="frame"><img data-shot="08-copy-text" src="assets/screenshots/zh/08-copy-text.webp" alt=""></div></div>
+      </div>
+      <div class="node reveal">
+        <div class="media"><div class="frame"><img data-shot="03-pins-card" src="assets/screenshots/zh/03-pins-card.webp" alt=""></div></div>
+        <span class="num">5</span>
+        <div class="copy"><div class="t" data-zh="复制为图片" data-en="Copy as image">复制为图片</div><p class="d" data-zh="导出带批注、位号、连线的整页长截图。" data-en="Export one long screenshot with pins and arrows baked in.">导出带批注、位号、连线的整页长截图。</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 收尾 CTA -->
+  <section class="blk">
+    <div class="closing reveal">
+      <span class="mark" data-dove></span>
+      <p class="punch" data-zh="把模糊想法变成清晰逻辑" data-en="Turn a vague idea into clear logic.">把模糊想法变成清晰逻辑</p>
+      <div class="hero-cta">
+        <a class="btn btn-gold" href="https://github.com/Pigeon-Pub/PigeonDeck" target="_blank" rel="noopener">
+          <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.37-3.37-1.37-.45-1.18-1.11-1.5-1.11-1.5-.91-.63.07-.62.07-.62 1 .07 1.53 1.06 1.53 1.06.9 1.57 2.36 1.12 2.94.86.09-.67.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.07 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.71 0 0 .84-.28 2.75 1.05a9.4 9.4 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.41.2 2.45.1 2.71.64.72 1.03 1.63 1.03 2.75 0 3.94-2.34 4.8-4.57 5.06.36.32.68.94.68 1.9v2.82c0 .27.18.6.69.49A10.26 10.26 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/></svg>
+          <span data-zh="在 GitHub 上查看" data-en="View on GitHub">在 GitHub 上查看</span>
+        </a>
+        <button type="button" class="btn btn-soon" disabled title="即将上线"><span data-zh="Edge 商店" data-en="Edge Add-ons">Edge 商店</span><span class="tag" data-zh="即将" data-en="Soon">即将</span></button>
+      </div>
+      <p class="trust" data-zh="无账号 · 无服务器 · 无遥测 · MIT 开源" data-en="No account · no server · no telemetry · MIT">无账号 · 无服务器 · 无遥测 · MIT 开源</p>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="foot-brand"><span class="mark" data-dove></span><span class="name">Pigeon<b>Deck</b></span></div>
+  <div class="foot-links">
+    <a href="https://github.com/Pigeon-Pub/PigeonDeck" target="_blank" rel="noopener">GitHub</a>
+    <a href="https://github.com/Pigeon-Pub/PigeonDeck/issues" target="_blank" rel="noopener"><span data-zh="问题反馈" data-en="Issues">问题反馈</span></a>
+    <span class="soon" title="即将上线" aria-disabled="true"><span data-zh="Edge 商店" data-en="Edge Add-ons">Edge 商店</span><span class="tag" data-zh="即将" data-en="Soon">即将</span></span>
+    <span class="soon" title="即将上线" aria-disabled="true"><span data-zh="crxsoso 镜像" data-en="crxsoso">crxsoso 镜像</span><span class="tag" data-zh="即将" data-en="Soon">即将</span></span>
+  </div>
+  <div class="foot-meta">© 2026 PigeonDeck<span class="dot">·</span><span data-zh="PigeonPub 团队出品" data-en="A PigeonPub team project">PigeonPub 团队出品</span><span class="dot">·</span><span data-zh="MIT 开源" data-en="MIT licensed">MIT 开源</span><span class="dot">·</span>deck.pigeon.pub</div>
+</footer>
+
+<script>
+(function(){
+  var svg=document.getElementById('dove').innerHTML;
+  document.querySelectorAll('[data-dove]').forEach(function(el){el.innerHTML=svg});
+  var root=document.documentElement;
+
+  /* 深浅色：首载跟随系统，之后持久化 */
+  var themeBtn=document.getElementById('themeBtn');
+  var SUN='<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 1.5v3M12 19.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M1.5 12h3M19.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1"/></svg>';
+  var MOON='<svg viewBox="0 0 24 24" fill="currentColor"><path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.8 6.8 0 0 0 9.8 9.8Z"/></svg>';
+  function applyTheme(t){root.setAttribute('data-theme',t);themeBtn.innerHTML=(t==='dark')?SUN:MOON}
+  var st=null;try{st=localStorage.getItem('pd-theme')}catch(e){}
+  applyTheme(st||((window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light'));
+  themeBtn.addEventListener('click',function(){var n=root.getAttribute('data-theme')==='dark'?'light':'dark';applyTheme(n);try{localStorage.setItem('pd-theme',n)}catch(e){}});
+
+  /* 中英双语 */
+  var langBtn=document.getElementById('langBtn');
+  function applyLang(lang){
+    root.setAttribute('lang',lang==='en'?'en':'zh-CN');
+    document.querySelectorAll('[data-zh]').forEach(function(el){var v=el.getAttribute('data-'+lang);if(v!=null)el.innerHTML=v});
+    document.querySelectorAll('[data-shot]').forEach(function(img){img.src='assets/screenshots/'+lang+'/'+img.getAttribute('data-shot')+'.webp'});
+    langBtn.textContent=lang==='en'?'中':'EN';
+  }
+  var sl=null;try{sl=localStorage.getItem('pd-lang')}catch(e){}
+  applyLang(sl||'zh');
+  langBtn.addEventListener('click',function(){var n=root.getAttribute('lang')==='en'?'zh':'en';applyLang(n);try{localStorage.setItem('pd-lang',n)}catch(e){}});
+
+  /* 滚动出现 */
+  var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target)}})},{threshold:.12,rootMargin:'0px 0px -8% 0px'});
+  document.querySelectorAll('.reveal').forEach(function(el){io.observe(el)});
+})();
+</script>
+</body>
+</html>
